@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crypto-tracker"
+version = "0.1.0"
+description = "CLI tool to track cryptocurrency prices and manage favorites"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Leandro", email = "leandro@example.com" }
+]
+keywords = ["crypto", "cli", "tracker", "coin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# Dependencias del proyecto
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+# Dependencias para desarrollo (tests, linting, etc.)
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.25.0",  # Para tests de cliente HTTP
+    "ruff>=0.1.0",    # Linter rápido
+    "mypy>=1.7.0",    # Tipado estático
+]
+
+# Script de entrada (cómo se ejecuta el CLI)
+[project.scripts]
+crypto-tracker = "src.cli.commands:main"
+
+# Configuración de herramientas
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "I", "N", "W"]  # Errores, imports, naming
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
