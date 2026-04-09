@@ -57,6 +57,9 @@ line-length = 88
 target-version = "py310"
 select = ["E", "F", "I", "N", "W"]  # Errores, imports, naming
 
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
