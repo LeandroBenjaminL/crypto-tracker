@@ -13,6 +13,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from src.core.exceptions import ConfigurationError
+
 
 def _find_project_root() -> Path:
     """
@@ -70,6 +72,14 @@ def load_settings() -> Settings:
         if cwd_dotenv.exists():
             load_dotenv(cwd_dotenv)
 
+    cache_ttl_raw = os.getenv("CACHE_TTL", "60")
+    try:
+        cache_ttl = int(cache_ttl_raw)
+    except ValueError:
+        raise ConfigurationError(
+            f"CACHE_TTL must be an integer (seconds), got: '{cache_ttl_raw}'",
+        )
+
     return Settings(
         coingecko_api_key=os.getenv("COINGECKO_API_KEY", ""),
         coingecko_base_url=os.getenv(
@@ -77,5 +87,5 @@ def load_settings() -> Settings:
             "https://api.coingecko.com/api/v3",
         ),
         default_currency=os.getenv("DEFAULT_CURRENCY", "usd"),
-        cache_ttl=int(os.getenv("CACHE_TTL", "60")),
+        cache_ttl=cache_ttl,
     )

@@ -18,7 +18,7 @@ from src.core.models import (
     PriceData,
     PriceAlert,
 )
-from src.core.exceptions import CoinNotFoundError, ValidationError
+from src.core.exceptions import APIError, CoinNotFoundError, ValidationError
 
 
 # ------------------------------------------------------------------
@@ -56,7 +56,7 @@ class CoinGeckoClientProtocol(Protocol):
 
 
 # ------------------------------------------------------------------
-# Known symbol → id mapping (for quick lookups without API calls)
+# Known symbol ↔ id mapping (for quick lookups without API calls)
 # ------------------------------------------------------------------
 
 # Common coins mapped from symbol to CoinGecko ID.
@@ -94,6 +94,13 @@ SYMBOL_TO_ID: dict[str, str] = {
     "axs": "axie-infinity",
 }
 
+# Reverse map: CoinGecko ID → trading symbol.
+# Auto-generated from SYMBOL_TO_ID so they stay in sync.
+ID_TO_SYMBOL: dict[str, str] = {
+    coin_id: symbol
+    for symbol, coin_id in SYMBOL_TO_ID.items()
+}
+
 
 def _normalize_query(query: str) -> str:
     """Lowercase and strip whitespace from a user query."""
@@ -129,20 +136,23 @@ def _build_coin_from_api_dict(raw: dict[str, Any]) -> Cryptocurrency:
     )
 
 
-def _build_price_data(coin_id: str, price_dict: dict[str, Any]) -> PriceData:
+def _build_price_data(
+    coin_id: str,
+    price_dict: dict[str, Any],
+    currency: str = "usd",
+) -> PriceData:
     """
     Convert a raw price dict to a PriceData model.
 
     The /simple/price endpoint returns nested dicts like:
         {"usd": 45000, "usd_24h_change": 2.5, ...}
     """
-    currency = "usd"
     return PriceData(
         coin_id=coin_id,
-        price=float(price_dict.get(currency, 0)),
-        change_24h=float(price_dict.get(f"{currency}_24h_change", 0)),
-        volume_24h=float(price_dict.get(f"{currency}_24h_vol", 0)),
-        market_cap=float(price_dict.get(f"{currency}_market_cap", 0)),
+        price=float(price_dict.get(currency, 0) or 0),
+        change_24h=float(price_dict.get(f"{currency}_24h_change", 0) or 0),
+        volume_24h=float(price_dict.get(f"{currency}_24h_vol", 0) or 0),
+        market_cap=float(price_dict.get(f"{currency}_market_cap", 0) or 0),
     )
 
 
@@ -204,12 +214,9 @@ class PriceService:
         prices = self._client.get_price([coin_id], currency=currency)
         price_dict = prices.get(coin_id, {})
 
-        coin = Cryptocurrency(
-            id=coin_id,
-            symbol=query.lower() if len(query) <= 10 else coin_id,
-            name=coin_id.capitalize(),
-        )
-        price_data = _build_price_data(coin_id, price_dict) if price_dict else None
+        symbol = ID_TO_SYMBOL.get(coin_id, coin_id)
+        coin = Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title())
+        price_data = _build_price_data(coin_id, price_dict, currency=currency) if price_dict else None
         return CoinSearchResult(coin=coin, price_data=price_data)
 
     def get_prices(
@@ -231,15 +238,16 @@ class PriceService:
 
         results: list[CoinSearchResult] = []
         for coin_id in coin_ids:
+            symbol = ID_TO_SYMBOL.get(coin_id, coin_id)
             price_dict = prices.get(coin_id, {})
             if price_dict:
-                coin = Cryptocurrency(id=coin_id, symbol=coin_id, name=coin_id.capitalize())
-                price_data = _build_price_data(coin_id, price_dict)
+                coin = Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title())
+                price_data = _build_price_data(coin_id, price_dict, currency=currency)
                 results.append(CoinSearchResult(coin=coin, price_data=price_data))
             else:
                 results.append(
                     CoinSearchResult(
-                        coin=Cryptocurrency(id=coin_id, symbol=coin_id, name=coin_id.capitalize()),
+                        coin=Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title()),
                     )
                 )
 
@@ -304,8 +312,8 @@ class PriceService:
             results = self._client.search_coin(normalized)
             if results:
                 return results[0]["id"]
-        except Exception:
-            pass  # fall through — let the API call fail naturally
+        except (APIError, CoinNotFoundError):
+            pass  # fall through — let the real API call fail naturally
 
         # Step 3: use as-is
         return normalized

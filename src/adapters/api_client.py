@@ -79,7 +79,7 @@ class CoinGeckoClient:
         retry_strategy = Retry(
             total=2,
             backoff_factor=0.5,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[500, 502, 503, 504],  # 429 excluded — handled by RateLimiter
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self._session = requests.Session()
@@ -194,7 +194,14 @@ class CoinGeckoClient:
                 status_code=response.status_code,
             )
 
-        return response.json()
+        try:
+            return response.json()
+        except requests.JSONDecodeError:
+            snippet = response.text[:200]
+            raise APIError(
+                f"Invalid JSON response (status {response.status_code}): {snippet}",
+                status_code=response.status_code,
+            )
 
     def _validate_coin_response(
         self,
