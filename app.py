@@ -136,8 +136,8 @@ with st.sidebar:
         help="Moneda para mostrar los precios",
     )
 
-    st.divider()
-    auto_refresh = st.toggle("Auto-refresh", value=False, help="Actualizar automáticamente cada 30s")
+    if st.button("🔄 Refrescar datos", use_container_width=True, type="secondary"):
+        st.rerun()
 
     st.divider()
     st.markdown(
@@ -145,10 +145,6 @@ with st.sidebar:
         "Powered by CoinGecko</p>",
         unsafe_allow_html=True,
     )
-
-# Auto-refresh
-if auto_refresh:
-    st.autorefresh(interval=30000, key="autorefresh")
 
 # ---------------------------------------------------------------------------
 # Helper: format price for display
