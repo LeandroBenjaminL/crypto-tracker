@@ -7,21 +7,19 @@ This lets us verify every business rule without hitting the network.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.models import (
-    CoinSearchResult,
-    Cryptocurrency,
-    PriceData,
-)
 from src.core.exceptions import ValidationError
+from src.core.models import (
+    Cryptocurrency,
+)
 from src.core.price_service import (
+    SYMBOL_TO_ID,
     PriceService,
     _normalize_query,
     _try_resolve_id,
-    SYMBOL_TO_ID,
 )
 
 

@@ -51,7 +51,9 @@ class Settings:
     cache_ttl: int = 60  # seconds
 
     # --- Paths ---
-    favorites_file: Path = field(default_factory=lambda: Path.home() / ".crypto_tracker.json")
+    favorites_file: Path = field(
+        default_factory=lambda: Path.home() / ".crypto_tracker.json"
+    )
 
 
 def load_settings() -> Settings:

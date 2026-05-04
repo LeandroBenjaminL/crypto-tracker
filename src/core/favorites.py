@@ -18,6 +18,7 @@ from src.core.models import FavoriteCoin
 
 class FavoritesError(CryptoTrackerError):
     """Something went wrong with the favorites file."""
+
     pass
 
 
@@ -52,7 +53,7 @@ class FavoritesManager:
         """Add a coin to favorites (idempotent — no duplicates)."""
         normalized = symbol.strip().lower()
         if not normalized:
-            return
+            raise ValueError("Symbol cannot be empty")
 
         raw = self._load()
 
@@ -60,10 +61,12 @@ class FavoritesManager:
         if any(e["symbol"] == normalized for e in raw):
             return
 
-        raw.append({
-            "symbol": normalized,
-            "added_at": datetime.now(timezone.utc).isoformat(),
-        })
+        raw.append(
+            {
+                "symbol": normalized,
+                "added_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         self._save(raw)
 
     def remove(self, symbol: str) -> None:

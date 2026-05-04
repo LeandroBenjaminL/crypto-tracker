@@ -12,18 +12,17 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from src.core.exceptions import APIError, CoinNotFoundError, ValidationError
 from src.core.models import (
     CoinSearchResult,
     Cryptocurrency,
     PriceData,
-    PriceAlert,
 )
-from src.core.exceptions import APIError, CoinNotFoundError, ValidationError
-
 
 # ------------------------------------------------------------------
 # Protocol: the contract that any API client must fulfill
 # ------------------------------------------------------------------
+
 
 class CoinGeckoClientProtocol(Protocol):
     """
@@ -106,8 +105,7 @@ SYMBOL_TO_ID: dict[str, str] = {
 # Reverse map: CoinGecko ID → trading symbol.
 # Auto-generated from SYMBOL_TO_ID so they stay in sync.
 ID_TO_SYMBOL: dict[str, str] = {
-    coin_id: symbol
-    for symbol, coin_id in SYMBOL_TO_ID.items()
+    coin_id: symbol for symbol, coin_id in SYMBOL_TO_ID.items()
 }
 
 
@@ -185,6 +183,7 @@ def _build_price_data_from_market(raw: dict[str, Any]) -> PriceData:
 # The service itself
 # ------------------------------------------------------------------
 
+
 class PriceService:
     """
     Business logic for cryptocurrency price operations.
@@ -224,8 +223,14 @@ class PriceService:
         price_dict = prices.get(coin_id, {})
 
         symbol = ID_TO_SYMBOL.get(coin_id, coin_id)
-        coin = Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title())
-        price_data = _build_price_data(coin_id, price_dict, currency=currency) if price_dict else None
+        coin = Cryptocurrency(
+            id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title()
+        )
+        price_data = (
+            _build_price_data(coin_id, price_dict, currency=currency)
+            if price_dict
+            else None
+        )
         return CoinSearchResult(coin=coin, price_data=price_data)
 
     def get_prices(
@@ -250,13 +255,19 @@ class PriceService:
             symbol = ID_TO_SYMBOL.get(coin_id, coin_id)
             price_dict = prices.get(coin_id, {})
             if price_dict:
-                coin = Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title())
+                coin = Cryptocurrency(
+                    id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title()
+                )
                 price_data = _build_price_data(coin_id, price_dict, currency=currency)
                 results.append(CoinSearchResult(coin=coin, price_data=price_data))
             else:
                 results.append(
                     CoinSearchResult(
-                        coin=Cryptocurrency(id=coin_id, symbol=symbol, name=coin_id.replace("-", " ").title()),
+                        coin=Cryptocurrency(
+                            id=coin_id,
+                            symbol=symbol,
+                            name=coin_id.replace("-", " ").title(),
+                        ),
                     )
                 )
 
@@ -272,7 +283,9 @@ class PriceService:
         raw_results = self._client.search_coin(normalized)
         return [_build_coin_from_api_dict(r) for r in raw_results]
 
-    def list_top(self, limit: int = 10, currency: str = "usd") -> list[CoinSearchResult]:
+    def list_top(
+        self, limit: int = 10, currency: str = "usd"
+    ) -> list[CoinSearchResult]:
         """
         Get the top N cryptocurrencies by market cap.
 
@@ -314,9 +327,11 @@ class PriceService:
 
         prices = raw.get("prices", [])
         # Cada elemento es [timestamp_ms, price]
+        # Filtramos entries con price null que CoinGecko a veces devuelve
         return [
             {"timestamp": ts, "price": price}
             for ts, price in prices
+            if price is not None
         ]
 
     # ------------------------------------------------------------------

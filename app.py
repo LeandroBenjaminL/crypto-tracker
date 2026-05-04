@@ -6,20 +6,20 @@ Visual interface for the crypto-tracker engine.
 
 from __future__ import annotations
 
-import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 
 from src.adapters.api_client import CoinGeckoClient
-from src.core.favorites import FavoritesManager
-from src.core.price_service import PriceService
 from src.core.exceptions import (
-    CryptoTrackerError,
     CoinNotFoundError,
+    CryptoTrackerError,
     NetworkError,
     RateLimitError,
 )
+from src.core.favorites import FavoritesManager
+from src.core.price_service import PriceService
 
 # ---------------------------------------------------------------------------
 # Page config (MUST be first Streamlit command)
@@ -226,8 +226,9 @@ if "Favoritos" in page:
     with st.spinner("Cargando..."):
         try:
             results = service.get_prices(fav_symbols, currency=currency)
-        except CryptoTrackerError:
-            results = []
+        except CryptoTrackerError as e:
+            show_error(e)
+            st.stop()
 
     for result in results:
         coin = result.coin
@@ -334,11 +335,11 @@ if "Precio" in page:
             coin_symbol = coin.symbol.lower()
             is_fav = favorites.is_favorite(coin_symbol)
             if is_fav:
-                if st.button("⭐ Quitar de favoritos", key="fav_toggle"):
+                if st.button("⭐ Quitar de favoritos", key=f"fav_del_{coin_symbol}"):
                     favorites.remove(coin_symbol)
                     st.rerun()
             else:
-                if st.button("☆ Agregar a favoritos", key="fav_toggle"):
+                if st.button("☆ Agregar a favoritos", key=f"fav_add_{coin_symbol}"):
                     favorites.add(coin_symbol)
                     st.rerun()
 

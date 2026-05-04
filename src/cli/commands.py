@@ -11,8 +11,6 @@ It knows NOTHING about HTTP. That's the adapter's job.
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
 
 from src.adapters.api_client import CoinGeckoClient
@@ -28,10 +26,10 @@ from src.core.exceptions import (
 from src.core.models import CoinSearchResult
 from src.core.price_service import PriceService
 
-
 # ------------------------------------------------------------------
 # Wire up: create the service with its dependencies
 # ------------------------------------------------------------------
+
 
 def _build_service() -> PriceService:
     """
@@ -50,6 +48,7 @@ def _build_service() -> PriceService:
 # ------------------------------------------------------------------
 # Shared formatting utilities
 # ------------------------------------------------------------------
+
 
 def _format_price(price: float) -> str:
     """Format a price value based on magnitude."""
@@ -88,8 +87,10 @@ def _print_result(result: CoinSearchResult) -> None:
     coin = result.coin
 
     # Header: name + symbol
-    click.echo(click.style(f"\n{coin.name} ", bold=True) +
-               click.style(f"({coin.symbol.upper()})", dim=True))
+    click.echo(
+        click.style(f"\n{coin.name} ", bold=True)
+        + click.style(f"({coin.symbol.upper()})", dim=True)
+    )
 
     if result.has_price() and result.price_data:
         pd = result.price_data
@@ -103,7 +104,9 @@ def _print_result(result: CoinSearchResult) -> None:
         click.echo(click.style("  No price data available", fg="yellow"))
 
 
-def _print_table_row(rank: int, name: str, symbol: str, price: float, change: float) -> None:
+def _print_table_row(
+    rank: int, name: str, symbol: str, price: float, change: float
+) -> None:
     """Print a single row of the top-coins table."""
     name_col = click.style(f"{name:<16}", bold=True)
     symbol_col = click.style(f"{symbol.upper():>6}", dim=True)
@@ -122,6 +125,7 @@ def _print_table_row(rank: int, name: str, symbol: str, price: float, change: fl
 # Shared error handler
 # ------------------------------------------------------------------
 
+
 def _handle_error(error: CryptoTrackerError) -> None:
     """Map domain exceptions to user-friendly error messages."""
     if isinstance(error, ValidationError):
@@ -129,17 +133,29 @@ def _handle_error(error: CryptoTrackerError) -> None:
     elif isinstance(error, CoinNotFoundError):
         click.echo(click.style(f"[X] {error}", fg="yellow"), err=True)
     elif isinstance(error, RateLimitError):
-        click.echo(click.style(
-            "[-] API rate limit hit. Wait a bit and try again.", fg="yellow",
-        ), err=True)
+        click.echo(
+            click.style(
+                "[-] API rate limit hit. Wait a bit and try again.",
+                fg="yellow",
+            ),
+            err=True,
+        )
     elif isinstance(error, NetworkError):
-        click.echo(click.style(
-            "[!] Network error -- check your internet connection.", fg="red",
-        ), err=True)
+        click.echo(
+            click.style(
+                "[!] Network error -- check your internet connection.",
+                fg="red",
+            ),
+            err=True,
+        )
     elif isinstance(error, APIError):
-        click.echo(click.style(
-            f"[!] API error: {error}", fg="red",
-        ), err=True)
+        click.echo(
+            click.style(
+                f"[!] API error: {error}",
+                fg="red",
+            ),
+            err=True,
+        )
     else:
         click.echo(click.style(f"[!] Unexpected error: {error}", fg="red"), err=True)
 
@@ -147,6 +163,7 @@ def _handle_error(error: CryptoTrackerError) -> None:
 # ------------------------------------------------------------------
 # CLI commands
 # ------------------------------------------------------------------
+
 
 @click.group()
 @click.version_option(version="0.1.0", prog_name="crypto-tracker")
@@ -161,7 +178,8 @@ def cli() -> None:
 @cli.command()
 @click.argument("symbols", nargs=-1, required=True)
 @click.option(
-    "--currency", "-c",
+    "--currency",
+    "-c",
     default="usd",
     show_default=True,
     help="Currency for price display (usd, eur, ars, etc.)",
@@ -189,13 +207,15 @@ def price(symbols: tuple[str, ...], currency: str) -> None:
 
 @cli.command()
 @click.option(
-    "--limit", "-l",
+    "--limit",
+    "-l",
     default=10,
     show_default=True,
     help="Number of top coins to show (max 250)",
 )
 @click.option(
-    "--currency", "-c",
+    "--currency",
+    "-c",
     default="usd",
     show_default=True,
     help="Currency for price display",
@@ -208,9 +228,12 @@ def list_coins(limit: int, currency: str) -> None:
         results = service.list_top(limit=limit, currency=currency)
 
         click.echo()
-        click.echo(click.style(
-            f"  Top {limit} Cryptocurrencies\n", bold=True,
-        ))
+        click.echo(
+            click.style(
+                f"  Top {limit} Cryptocurrencies\n",
+                bold=True,
+            )
+        )
 
         for result in results:
             pd = result.price_data
@@ -236,9 +259,12 @@ def search(query: str) -> None:
         results = service.search(query)
 
         if not results:
-            click.echo(click.style(
-                f"No coins found matching '{query}'", fg="yellow",
-            ))
+            click.echo(
+                click.style(
+                    f"No coins found matching '{query}'",
+                    fg="yellow",
+                )
+            )
             return
 
         click.echo()
@@ -257,6 +283,7 @@ def search(query: str) -> None:
 # ------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------
+
 
 def main() -> None:
     """Entry point for the CLI (called from pyproject.toml scripts)."""

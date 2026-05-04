@@ -40,7 +40,9 @@ class RateLimiter:
         """Block if we've exceeded the rate limit in the current window."""
         now = time.monotonic()
         # Drop timestamps outside the window
-        self._timestamps = [t for t in self._timestamps if now - t < self.window_seconds]
+        self._timestamps = [
+            t for t in self._timestamps if now - t < self.window_seconds
+        ]
 
         if len(self._timestamps) >= self.max_calls:
             # Sleep until the oldest timestamp falls out of the window
@@ -79,7 +81,12 @@ class CoinGeckoClient:
         retry_strategy = Retry(
             total=2,
             backoff_factor=0.5,
-            status_forcelist=[500, 502, 503, 504],  # 429 excluded — handled by RateLimiter
+            status_forcelist=[
+                500,
+                502,
+                503,
+                504,
+            ],  # 429 excluded — handled by RateLimiter
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self._session = requests.Session()

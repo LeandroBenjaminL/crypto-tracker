@@ -7,16 +7,16 @@ No external dependencies are mocked - we test pure Python behavior.
 
 from datetime import datetime, timezone
 
-from src.core.models import (
-    Cryptocurrency,
-    PriceData,
-    CoinSearchResult,
-    FavoriteCoin,
-    PriceAlert,
-)
 from src.core.exceptions import (
     CoinNotFoundError,
     ValidationError,
+)
+from src.core.models import (
+    CoinSearchResult,
+    Cryptocurrency,
+    FavoriteCoin,
+    PriceAlert,
+    PriceData,
 )
 
 
