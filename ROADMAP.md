@@ -17,12 +17,12 @@ This roadmap tracks the development phases of the Crypto Tracker CLI project. Ea
 
 ---
 
-## Phase 2: Core Models (Week 1-2)
-**Goal: Define data structures**
+## Phase 2: Core Models
+**Goal: Define data structures** ✅
 
-- [ ] `src/core/models.py` - Cryptocurrency, Price data classes
-- [ ] `src/core/exceptions.py` - Custom exceptions
-- [ ] Unit tests for models
+- [x] `src/core/models.py` - Cryptocurrency, Price data classes
+- [x] `src/core/exceptions.py` - Custom exceptions
+- [x] Unit tests for models
 
 **Learning Objectives:**
 - Python dataclasses
@@ -31,13 +31,13 @@ This roadmap tracks the development phases of the Crypto Tracker CLI project. Ea
 
 ---
 
-## Phase 3: API Integration (Week 2-3)
-**Goal: Connect to CoinGecko API**
+## Phase 3: API Integration
+**Goal: Connect to CoinGecko API** ✅
 
-- [ ] `src/adapters/api_client.py` - CoinGecko wrapper
-- [ ] `src/config/settings.py` - Configuration management
-- [ ] Integration tests with `httpx`
-- [ ] Rate limiting handling
+- [x] `src/adapters/api_client.py` - CoinGecko wrapper with rate limiting
+- [x] `src/config/settings.py` - Environment-based configuration
+- [x] Integration tests with mocked HTTP (16 tests)
+- [x] Rate limiting handling (429, Retry-After)
 
 **Learning Objectives:**
 - HTTP requests with `requests`
@@ -47,12 +47,13 @@ This roadmap tracks the development phases of the Crypto Tracker CLI project. Ea
 
 ---
 
-## Phase 4: Business Logic (Week 3-4)
-**Goal: Implement price service**
+## Phase 4: Business Logic
+**Goal: Implement price service** ✅
 
-- [ ] `src/core/price_service.py` - Core business logic
-- [ ] Dependency injection pattern
-- [ ] Unit tests with mocked API client
+- [x] `src/core/price_service.py` - Core business logic
+- [x] Dependency injection via Protocol (structural typing)
+- [x] Symbol-to-ID resolution (local map + API fallback)
+- [x] Unit tests with mocked API client (25 tests)
 
 **Learning Objectives:**
 - Separation of concerns
@@ -61,13 +62,15 @@ This roadmap tracks the development phases of the Crypto Tracker CLI project. Ea
 
 ---
 
-## Phase 5: CLI Interface (Week 4-5)
-**Goal: Build command interface**
+## Phase 5: CLI Interface
+**Goal: Build command interface** ✅
 
-- [ ] `src/cli/commands.py` - Click-based CLI
-- [ ] `crypto-tracker price <symbol>` command
-- [ ] `crypto-tracker list` command
-- [ ] Help and error messages
+- [x] `src/cli/commands.py` - Click-based CLI
+- [x] `crypto-tracker price <symbol>` command (single + batch)
+- [x] `crypto-tracker list-coins` command (top N by market cap)
+- [x] `crypto-tracker search <query>` command
+- [x] Color-coded output (green/red for gains/losses)
+- [x] Friendly error messages for all exception types
 
 **Learning Objectives:**
 - Building CLIs with Click
@@ -137,8 +140,8 @@ These features are planned but not scheduled:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.1.0 | TBD | Foundation complete |
-| 0.0.1 | Current | Project structure |
+| 0.1.0 | 2026-05-04 | CLI complete: price, list, search commands |
+| 0.0.1 | 2026-04-10 | Project structure + core models |
 
 ---
 
