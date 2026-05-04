@@ -58,6 +58,8 @@ addopts = "-v --tb=short"
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]  # Errores, imports, naming
 
 [tool.hatch.build.targets.wheel]
