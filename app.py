@@ -12,6 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from src.adapters.api_client import CoinGeckoClient
+from src.core.favorites import FavoritesManager
 from src.core.price_service import PriceService
 from src.core.exceptions import (
     CryptoTrackerError,
@@ -99,6 +100,14 @@ def get_service() -> PriceService:
 
 service = get_service()
 
+
+@st.cache_resource
+def get_favorites() -> FavoritesManager:
+    return FavoritesManager()
+
+
+favorites = get_favorites()
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -114,7 +123,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navegación",
-        ["🔍  Precio", "🏆  Top Monedas", "🔎  Buscar"],
+        ["⭐  Favoritos", "🔍  Precio", "🏆  Top Monedas", "🔎  Buscar"],
         label_visibility="collapsed",
     )
 
@@ -186,7 +195,66 @@ def show_error(e: CryptoTrackerError) -> None:
 
 
 # ===================================================================
-# PAGE 1 — PRICE
+# PAGE 1 — FAVORITES
+# ===================================================================
+
+if "Favoritos" in page:
+
+    st.markdown("<h1>⭐  Favoritos</h1>", unsafe_allow_html=True)
+
+    fav_list = favorites.list_all()
+
+    if not fav_list:
+        st.markdown(
+            "<p style='opacity: 0.6;'>"
+            "Todavía no tenés favoritos. Buscá una moneda y agregala "
+            "desde la página de Precio.</p>",
+            unsafe_allow_html=True,
+        )
+        st.stop()
+
+    # Build a list of symbols
+    fav_symbols = [f.symbol for f in fav_list]
+
+    with st.spinner("Cargando..."):
+        try:
+            results = service.get_prices(fav_symbols, currency=currency)
+        except CryptoTrackerError:
+            results = []
+
+    for result in results:
+        coin = result.coin
+        pd_data = result.price_data
+
+        col_info, col_action = st.columns([4, 1])
+        with col_info:
+            if pd_data:
+                is_up = pd_data.change_24h >= 0
+                arrow = "▲" if is_up else "▼"
+                color = "green" if is_up else "red"
+                st.markdown(
+                    f"<div style='padding: 0.5rem 0;'>"
+                    f"<strong>{coin.name}</strong> "
+                    f"<span style='opacity: 0.5;'>{coin.symbol.upper()}</span><br>"
+                    f"<span class='{color}'>{fmt_price(pd_data.price)}  "
+                    f"{arrow} {fmt_change(pd_data.change_24h)}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<div style='padding: 0.5rem 0;'>"
+                    f"<strong>{coin.name}</strong> "
+                    f"<span style='opacity: 0.6;'>Sin datos</span></div>",
+                    unsafe_allow_html=True,
+                )
+        with col_action:
+            if st.button("✕", key=f"del_{coin.symbol}", help=f"Quitar {coin.symbol.upper()}"):
+                favorites.remove(coin.symbol)
+                st.rerun()
+
+# ===================================================================
+# PAGE 2 — PRICE
 # ===================================================================
 
 if "Precio" in page:
@@ -254,6 +322,18 @@ if "Precio" in page:
                 st.metric("Volumen 24h", fmt_cap(pd.volume_24h) if pd.volume_24h else "—")
             with col4:
                 st.metric("Market Cap", fmt_cap(pd.market_cap) if pd.market_cap else "—")
+
+            # Add/remove favorites button
+            coin_symbol = coin.symbol.lower()
+            is_fav = favorites.is_favorite(coin_symbol)
+            if is_fav:
+                if st.button("⭐ Quitar de favoritos", key="fav_toggle"):
+                    favorites.remove(coin_symbol)
+                    st.rerun()
+            else:
+                if st.button("☆ Agregar a favoritos", key="fav_toggle"):
+                    favorites.add(coin_symbol)
+                    st.rerun()
 
             # Historical chart
             col_days, _ = st.columns([1, 2])
