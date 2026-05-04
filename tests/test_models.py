@@ -5,7 +5,7 @@ These tests validate that our data models work correctly.
 No external dependencies are mocked - we test pure Python behavior.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.core.models import (
     Cryptocurrency,
@@ -120,9 +120,9 @@ class TestPriceData:
 
     def test_default_timestamp(self):
         """Test that timestamp defaults to current UTC time."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         price = PriceData(coin_id="bitcoin", price=100)
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         assert before <= price.timestamp <= after
 
@@ -168,7 +168,7 @@ class TestFavoriteCoin:
 
     def test_custom_added_at(self):
         """Test custom added_at timestamp."""
-        custom_time = datetime(2024, 1, 15, 12, 0, 0)
+        custom_time = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
         fav = FavoriteCoin(symbol="btc", added_at=custom_time)
 
         assert fav.added_at == custom_time
@@ -193,7 +193,7 @@ class TestPriceAlert:
 
     def test_triggered_alert(self):
         """Test triggered alert."""
-        triggered_time = datetime.utcnow()
+        triggered_time = datetime.now(timezone.utc)
         alert = PriceAlert(
             coin_id="bitcoin",
             target_price=50000,

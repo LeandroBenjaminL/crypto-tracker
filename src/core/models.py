@@ -6,11 +6,11 @@ independent of any external dependencies (no requests, httpx, etc.)
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
-@dataclass
+@dataclass(eq=False)
 class Cryptocurrency:
     """
     Represents a cryptocurrency with its basic information.
@@ -22,6 +22,16 @@ class Cryptocurrency:
     symbol: str          # Trading symbol (e.g., "btc")
     name: str            # Full name (e.g., "Bitcoin")
     rank: int = 0        # Market cap rank
+    
+    def __eq__(self, other: object) -> bool:
+        """Two cryptocurrencies are equal if they share the same id."""
+        if not isinstance(other, Cryptocurrency):
+            return NotImplemented
+        return self.id == other.id
+    
+    def __hash__(self) -> int:
+        """Hash based on id so we can use these in sets."""
+        return hash(self.id)
     
     def __str__(self) -> str:
         return f"{self.name} ({self.symbol.upper()})"
@@ -39,7 +49,7 @@ class PriceData:
     change_24h: float = 0.0   # Percentage change in 24h
     volume_24h: float = 0.0   # Trading volume in 24h
     market_cap: float = 0.0   # Market capitalization
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     @property
     def price_formatted(self) -> str:
@@ -91,7 +101,7 @@ class FavoriteCoin:
     Stores the coin symbol (user-friendly) and when it was added.
     """
     symbol: str
-    added_at: datetime = field(default_factory=datetime.utcnow)
+    added_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     def __post_init__(self) -> None:
         """Normalize symbol to lowercase."""
@@ -108,6 +118,6 @@ class PriceAlert:
     coin_id: str
     target_price: float
     condition: str  # "above" or "below"
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     triggered_at: Optional[datetime] = None
