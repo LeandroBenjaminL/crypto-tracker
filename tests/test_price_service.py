@@ -316,3 +316,39 @@ class TestPriceService:
         mock_client.get_coin_history.assert_called_once_with(
             "bitcoin", days=7, currency="usd",
         )
+
+    def test_get_history_filters_none_prices(self, service: PriceService, mock_client: MagicMock):
+        """Entries with null price are filtered out."""
+        mock_client.search_coin.return_value = []
+        mock_client.get_coin_history.return_value = {
+            "prices": [
+                [1700000000000, 45000.0],
+                [1700086400000, None],     # null price — should be filtered
+                [1700172800000, 46000.0],
+            ],
+        }
+
+        result = service.get_history("bitcoin", days=7)
+
+        assert len(result) == 2  # None entry removed
+        assert all(r["price"] is not None for r in result)
+
+    def test_get_history_empty_prices(self, service: PriceService, mock_client: MagicMock):
+        """Empty prices list returns empty result."""
+        mock_client.search_coin.return_value = []
+        mock_client.get_coin_history.return_value = {"prices": []}
+
+        result = service.get_history("bitcoin", days=7)
+
+        assert result == []
+
+    def test_get_history_custom_days(self, service: PriceService, mock_client: MagicMock):
+        """Custom days parameter is passed through."""
+        mock_client.search_coin.return_value = []
+        mock_client.get_coin_history.return_value = {"prices": []}
+
+        service.get_history("bitcoin", days=30, currency="eur")
+
+        mock_client.get_coin_history.assert_called_once_with(
+            "bitcoin", days=30, currency="eur",
+        )

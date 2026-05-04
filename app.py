@@ -287,9 +287,9 @@ if "Precio" in page:
                 st.stop()
 
         if result.has_price() and result.price_data:
-            pd = result.price_data
+            price_d = result.price_data
             coin = result.coin
-            is_up = pd.change_24h >= 0
+            is_up = price_d.change_24h >= 0
             color_class = "green" if is_up else "red"
             arrow = "▲" if is_up else "▼"
 
@@ -323,9 +323,9 @@ if "Precio" in page:
             with col2:
                 st.metric("Cambio 24h", fmt_change(pd.change_24h))
             with col3:
-                st.metric("Volumen 24h", fmt_cap(pd.volume_24h) if pd.volume_24h else "—")
+                st.metric("Volumen 24h", fmt_cap(price_d.volume_24h) if price_d.volume_24h else "—")
             with col4:
-                st.metric("Market Cap", fmt_cap(pd.market_cap) if pd.market_cap else "—")
+                st.metric("Market Cap", fmt_cap(price_d.market_cap) if price_d.market_cap else "—")
 
             # Add/remove favorites button
             coin_symbol = coin.symbol.lower()
