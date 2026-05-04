@@ -137,11 +137,18 @@ with st.sidebar:
     )
 
     st.divider()
+    auto_refresh = st.toggle("Auto-refresh", value=False, help="Actualizar automáticamente cada 30s")
+
+    st.divider()
     st.markdown(
         "<p style='text-align: center; opacity: 0.4; font-size: 0.75rem;'>"
         "Powered by CoinGecko</p>",
         unsafe_allow_html=True,
     )
+
+# Auto-refresh
+if auto_refresh:
+    st.autorefresh(interval=30000, key="autorefresh")
 
 # ---------------------------------------------------------------------------
 # Helper: format price for display
@@ -489,6 +496,17 @@ elif "Top Monedas" in page:
     )
 
     st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    col_csv, _ = st.columns([1, 4])
+    with col_csv:
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Descargar CSV",
+            data=csv_bytes,
+            file_name=f"top_{limit}_crypto_{currency}.csv",
+            mime="text/csv",
+            help="Descargar los datos como archivo CSV",
+        )
 
     # Mini treemap of market cap distribution
     if len(df) > 0:
