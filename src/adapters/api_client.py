@@ -150,6 +150,28 @@ class CoinGeckoClient:
             return []
         return coins[:10]  # top 10 results
 
+    def get_coin_history(
+        self,
+        coin_id: str,
+        days: int = 7,
+        currency: str = "usd",
+    ) -> dict[str, Any]:
+        """
+        Fetch historical price data for a coin.
+
+        Returns dict with 'prices', 'market_caps', 'total_volumes'.
+        Each is a list of [timestamp, value] pairs.
+
+        CoinGecko endpoint: /coins/{id}/market_chart
+        """
+        data = self._get(
+            f"/coins/{coin_id}/market_chart",
+            {"vs_currency": currency, "days": days},
+        )
+        if not isinstance(data, dict) or "prices" not in data:
+            raise APIError(f"Unexpected history format for '{coin_id}'")
+        return data
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

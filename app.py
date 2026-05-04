@@ -255,24 +255,73 @@ if "Precio" in page:
             with col4:
                 st.metric("Market Cap", fmt_cap(pd.market_cap) if pd.market_cap else "—")
 
-            # Mini bar chart: positive/negative visual
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=["Cambio 24h"],
-                y=[pd.change_24h],
-                marker_color="#00d4aa" if is_up else "#ff6b6b",
-                showlegend=False,
-                width=[0.4],
-            ))
-            fig.update_layout(
-                height=120,
-                margin=dict(l=0, r=0, t=0, b=0),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(showgrid=False, visible=False),
-                yaxis=dict(showgrid=False, visible=False),
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # Historical chart
+            col_days, _ = st.columns([1, 2])
+            with col_days:
+                days = st.selectbox(
+                    "Período",
+                    options=[("7 días", 7), ("30 días", 30), ("90 días", 90), ("1 año", 365)],
+                    format_func=lambda x: x[0],
+                    label_visibility="collapsed",
+                )[1]
+
+            with st.spinner("Cargando historial..."):
+                try:
+                    history = service.get_history(query.strip(), days=days, currency=currency)
+                except CryptoTrackerError:
+                    history = []
+
+            if history:
+                df_hist = pd.DataFrame(history)
+                df_hist["timestamp"] = pd.to_datetime(df_hist["timestamp"], unit="ms")
+                start_price = df_hist["price"].iloc[0]
+                end_price = df_hist["price"].iloc[-1]
+                hist_change = ((end_price - start_price) / start_price) * 100
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=df_hist["timestamp"],
+                    y=df_hist["price"],
+                    mode="lines",
+                    name="Precio",
+                    line=dict(
+                        color="#00d4aa" if hist_change >= 0 else "#ff6b6b",
+                        width=2,
+                    ),
+                    fill="tozeroy",
+                    fillcolor="rgba(0,212,170,0.08)" if hist_change >= 0 else "rgba(255,107,107,0.08)",
+                ))
+                fig.update_layout(
+                    height=350,
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(
+                        showgrid=False,
+                        color="#666",
+                        showspikes=True,
+                        spikethickness=1,
+                        spikedash="dot",
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor="#2a2a4a",
+                        color="#666",
+                        tickprefix="$",
+                    ),
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown(
+                    f"<p style='opacity: 0.5; font-size: 0.8rem; text-align: center;'>"
+                    f"Variación en el período: "
+                    f"<span class='{'green' if hist_change >= 0 else 'red'}'>"
+                    f"{'▲' if hist_change >= 0 else '▼'} {abs(hist_change):.2f}%</span></p>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No hay datos históricos disponibles.")
 
         else:
             st.warning("No hay datos de precio para esta moneda.")
@@ -333,7 +382,7 @@ elif "Top Monedas" in page:
             "Market Cap": lambda x: fmt_cap(x),
             "Volumen 24h": lambda x: fmt_cap(x),
         })
-        .applymap(color_change, subset=["Cambio 24h"])
+        .map(color_change, subset=["Cambio 24h"])
         .set_properties(**{
             "background-color": "#1a1a2e",
             "color": "#f0f0f0",

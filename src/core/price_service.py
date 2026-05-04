@@ -54,6 +54,15 @@ class CoinGeckoClientProtocol(Protocol):
         """Search for coins by name or symbol."""
         ...
 
+    def get_coin_history(
+        self,
+        coin_id: str,
+        days: int = 7,
+        currency: str = "usd",
+    ) -> dict[str, Any]:
+        """Fetch historical price data for a coin."""
+        ...
+
 
 # ------------------------------------------------------------------
 # Known symbol ↔ id mapping (for quick lookups without API calls)
@@ -285,6 +294,30 @@ class PriceService:
             results.append(CoinSearchResult(coin=coin, price_data=price_data))
 
         return results
+
+    def get_history(
+        self,
+        query: str,
+        days: int = 7,
+        currency: str = "usd",
+    ) -> list[dict[str, float]]:
+        """
+        Get historical price data for a coin.
+
+        Returns a list of {timestamp, price} dicts sorted by time,
+        ready to feed into a charting library.
+
+        Days: 1, 7, 14, 30, 90, 180, 365, or 'max'
+        """
+        coin_id = self._resolve_to_id(query)
+        raw = self._client.get_coin_history(coin_id, days=days, currency=currency)
+
+        prices = raw.get("prices", [])
+        # Cada elemento es [timestamp_ms, price]
+        return [
+            {"timestamp": ts, "price": price}
+            for ts, price in prices
+        ]
 
     # ------------------------------------------------------------------
     # Internal helpers

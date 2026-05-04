@@ -290,3 +290,31 @@ class TestPriceService:
         """Empty query raises ValidationError."""
         with pytest.raises(ValidationError):
             service.get_price("")
+
+    # ------------------------------------------------------------------
+    # get_history
+    # ------------------------------------------------------------------
+
+    def test_get_history_success(self, service: PriceService, mock_client: MagicMock):
+        """Fetch historical prices."""
+        mock_client.search_coin.return_value = []
+        mock_client.get_coin_history.return_value = {
+            "prices": [[1700000000000, 45000.0], [1700086400000, 46000.0]],
+        }
+
+        result = service.get_history("bitcoin", days=7)
+
+        assert len(result) == 2
+        assert result[0]["timestamp"] == 1700000000000
+        assert result[0]["price"] == 45000.0
+
+    def test_get_history_resolves_symbol(self, service: PriceService, mock_client: MagicMock):
+        """Symbols are resolved before fetching history."""
+        mock_client.get_coin_history.return_value = {"prices": []}
+
+        service.get_history("btc", days=7)
+
+        # Should have resolved btc → bitcoin before calling the client
+        mock_client.get_coin_history.assert_called_once_with(
+            "bitcoin", days=7, currency="usd",
+        )

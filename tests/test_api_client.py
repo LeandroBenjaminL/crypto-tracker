@@ -246,6 +246,35 @@ class TestCoinGeckoClient:
             client.get_price(["bitcoin"])
 
 
+    # ------------------------------------------------------------------
+    # get_coin_history
+    # ------------------------------------------------------------------
+
+    def test_get_coin_history_success(self, client: CoinGeckoClient, mock_session: MagicMock):
+        """Fetch historical prices for a coin."""
+        mock_session.get.return_value = _mock_response({
+            "prices": [
+                [1700000000000, 45000.0],
+                [1700086400000, 46000.0],
+                [1700172800000, 45500.0],
+            ],
+            "market_caps": [],
+            "total_volumes": [],
+        })
+
+        result = client.get_coin_history("bitcoin", days=7)
+
+        assert "prices" in result
+        assert len(result["prices"]) == 3
+
+    def test_get_coin_history_bad_response(self, client: CoinGeckoClient, mock_session: MagicMock):
+        """Raise APIError when response has no 'prices' key."""
+        mock_session.get.return_value = _mock_response({"error": "not found"})
+
+        with pytest.raises(APIError):
+            client.get_coin_history("invalidcoin", days=7)
+
+
 class TestRateLimiter:
     """Tests for the RateLimiter."""
 
