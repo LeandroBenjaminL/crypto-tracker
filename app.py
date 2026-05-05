@@ -531,7 +531,7 @@ elif "Precio" in page:
                     ),
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key=f"hist_{query}_{days}")
 
                 st.markdown(
                     f"<p style='opacity: 0.5; font-size: 0.8rem; text-align: center;'>"
@@ -658,7 +658,7 @@ elif "Top Monedas" in page:
             font=dict(color="#f0f0f0", size=12),
         )
         fig.update_traces(textinfo="label+value")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="treemap_top")
 
 # ===================================================================
 # PAGE 3 — SEARCH
