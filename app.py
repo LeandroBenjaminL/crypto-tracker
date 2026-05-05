@@ -1,15 +1,10 @@
 """
 Crypto Tracker — panel web en Streamlit.
 
-La misma lógica del CLI pero con gráficos interactivos.
-"""
-
-"""
-Crypto Tracker — panel web en Streamlit.
-
-Ahora consume la API REST en vez de importar los services directo.
-Esto hace que los rerenders sean más livianos y el caché se comparta
-entre sesiones. La API arranca sola en un thread cuando abrís la app.
+Consume la API REST en vez de importar los services directo
+(la API arranca sola en un thread cuando abrís la app).
+Esto hace que los rerenders sean más livianos y el caché se
+comparta entre sesiones.
 """
 
 from __future__ import annotations
