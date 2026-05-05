@@ -9,9 +9,6 @@ comparta entre sesiones.
 
 from __future__ import annotations
 
-import atexit
-import subprocess
-import sys
 from typing import Any, Literal
 
 import pandas as pd
@@ -167,79 +164,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Auto-arranque de la API
+# Conexión con la API
 #
-# FastAPI corre como proceso separado. Si no está levantada, la arrancamos
-# con subprocess y la matamos cuando Streamlit termina.
+# FastAPI corre como proceso aparte. Si no está levantada, mostramos
+# instrucciones claras para arrancarla.
 # ---------------------------------------------------------------------------
 
 _API_PORT = 8000
-_api_proc: subprocess.Popen | None = None
 
 
-def _start_api() -> bool:
-    """
-    Levanta FastAPI como proceso hijo y espera hasta 10s a que responda.
-    No usa cache_resource — se llama directo y Streamlit muestra spinner.
-    """
-    import time
-
-    global _api_proc
-
-    # Si ya está corriendo, fue
+def _check_api() -> bool:
+    """Verifica si la API responde."""
     try:
-        if api.health().get("status") == "ok":
-            return True
+        return api.health().get("status") == "ok"
     except Exception:
-        pass
-
-    # Arrancamos uvicorn como proceso separado
-    _api_proc = subprocess.Popen(
-        [
-            sys.executable, "-m", "uvicorn",
-            "src.api.server:app",
-            "--host", "127.0.0.1",
-            "--port", str(_API_PORT),
-            "--log-level", "warning",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    # Esperamos hasta 10s a que levante (polling cada 0.25s)
-    for _ in range(40):
-        time.sleep(0.25)
-        try:
-            if api.health().get("status") == "ok":
-                return True
-        except Exception:
-            continue
-
-    # No arrancó — matamos el proceso
-    _api_proc.kill()
-    _api_proc = None
-    return False
+        return False
 
 
-# Limpiar el proceso hijo cuando Streamlit termina
-def _cleanup_api() -> None:
-    if _api_proc is not None:
-        _api_proc.terminate()
-        _api_proc.wait(timeout=3)
-
-
-atexit.register(_cleanup_api)
-
-
-# Arrancar la API (con spinner visible)
-with st.spinner("Arrancando servidor API..."):
-    api_ok = _start_api()
-
-if not api_ok:
+if not _check_api():
     st.error(
-        "No se pudo conectar con la API. "
-        "Probá arrancarla manualmente:\n\n"
-        "```\nuvicorn src.api.server:app --reload\n```"
+        "La API no está corriendo. Abrí otra terminal y ejecutá:\n\n"
+        "```\nuvicorn src.api.server:app --reload\n```\n\n"
+        "Después recargá esta página."
     )
     st.stop()
 
