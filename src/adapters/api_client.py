@@ -67,28 +67,37 @@ class TTLCache:
 @dataclass
 class RateLimiter:
     """
-    Simple rate limiter to avoid hitting API limits.
+    Rate limiter sencillo para no romper el tier gratis de CoinGecko.
 
-    Tracks request timestamps and sleeps if we're going too fast.
-    CoinGecko free tier without API key: ~10-30 calls/min.
-    We use 5/min to leave headroom.
+    Sin API key son ~10-30 calls/min. Nosotros usamos 5/min para dejar
+    margen y que no nos banneen.
+
+    Si se excede el límite, espera hasta max_wait segundos. Si pasa de ahí,
+    levanta RateLimitError — mejor fallar rápido que dejar al usuario
+    mirando un spinner 50 segundos.
     """
 
-    max_calls: int = 5  # max requests per window (conservative for free tier)
-    window_seconds: float = 60.0  # rolling window
+    max_calls: int = 5
+    window_seconds: float = 60.0
+    max_wait: float = 8.0  # esperamos maximo 8s antes de rendirnos
     _timestamps: list[float] = field(default_factory=list)
 
     def wait_if_needed(self) -> None:
-        """Block if we've exceeded the rate limit in the current window."""
+        """
+        Frena si nos pasamos del rate limit.
+
+        Si hay que esperar más de max_wait, mejor tiramos error
+        antes de dejar colgado al usuario.
+        """
         now = time.monotonic()
-        # Drop timestamps outside the window
         self._timestamps = [
             t for t in self._timestamps if now - t < self.window_seconds
         ]
 
         if len(self._timestamps) >= self.max_calls:
-            # Sleep until the oldest timestamp falls out of the window
             sleep_for = self._timestamps[0] + self.window_seconds - now
+            if sleep_for > self.max_wait:
+                raise RateLimitError(retry_after=int(sleep_for))
             if sleep_for > 0:
                 time.sleep(sleep_for)
 
@@ -118,7 +127,14 @@ class CoinGeckoClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self._rate_limiter = rate_limiter or RateLimiter()
+
+        # Sin API key somos más conservadores con el rate limit
+        if rate_limiter is None:
+            if api_key:
+                rate_limiter = RateLimiter(max_calls=30, window_seconds=60.0)
+            else:
+                rate_limiter = RateLimiter(max_calls=5, window_seconds=60.0)
+        self._rate_limiter = rate_limiter
         self._cache = TTLCache(ttl=cache_ttl)
 
         # Configure session with retry strategy for transient errors

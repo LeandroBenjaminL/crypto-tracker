@@ -1,7 +1,7 @@
 """
-Crypto Tracker — Streamlit App.
+Crypto Tracker — panel web en Streamlit.
 
-Visual interface for the crypto-tracker engine.
+La misma lógica del CLI pero con gráficos interactivos.
 """
 
 from __future__ import annotations
@@ -94,15 +94,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Service singleton (cached so we don't rebuild on every rerun)
+# Servicios globales (se crean una vez, viven en memoria de Streamlit)
+#
+# Usamos cache_resource en vez de cache_data porque los objetos del dominio
+# (Cryptocurrency, PriceData) no se dejan pickle-izar. cache_resource los
+# mantiene en memoria con TTL y listo.
 # ---------------------------------------------------------------------------
 
-_CACHE_TTL = 60  # seconds — how long before re-fetching API data
+# El history es caro de pedir y cambia lento, lo cacheamos más tiempo
+_CACHE_TTL = 60       # price, search, top — son datos frescos
+_HISTORY_TTL = 300    # history — 5 min, los precios históricos no cambian tanto
 
 
 @st.cache_resource
 def get_service() -> PriceService:
-    client = CoinGeckoClient(cache_ttl=30.0)
+    client = CoinGeckoClient(
+        api_key=settings.coingecko_api_key,
+        cache_ttl=30.0,
+    )
     return PriceService(api_client=client)
 
 
@@ -117,42 +126,35 @@ def get_favorites() -> FavoritesManager:
 favorites = get_favorites()
 
 
-# ---------------------------------------------------------------------------
-# Streamlit cache layer — prevents re-fetching on every rerun
-#
-# Usamos cache_resource (no cache_data) porque los objetos del dominio
-# (CoinSearchResult, Cryptocurrency, PriceData) no son pickle-serializables.
-# cache_resource mantiene la referencia en memoria con TTL.
-# ---------------------------------------------------------------------------
-
-
+# Cache wrappers con TTL — si está fresco, ni golpeamos la API
 @st.cache_resource(ttl=_CACHE_TTL)
-def _cached_price(query: str, currency: str) -> Any:
-    """Cached wrapper around service.get_price()."""
+def _load_price(query: str, currency: str) -> Any:
+    """Pide el precio de una moneda."""
     return service.get_price(query, currency=currency)
 
 
 @st.cache_resource(ttl=_CACHE_TTL)
-def _cached_prices(queries: tuple[str, ...], currency: str) -> Any:
-    """Cached wrapper around service.get_prices()."""
+def _load_prices(queries: tuple[str, ...], currency: str) -> Any:
+    """Pide precios de varias monedas de una."""
     return service.get_prices(list(queries), currency=currency)
 
 
 @st.cache_resource(ttl=_CACHE_TTL)
-def _cached_top(limit: int, currency: str) -> Any:
-    """Cached wrapper around service.list_top()."""
+def _load_top(limit: int, currency: str) -> Any:
+    """Top N monedas por market cap."""
     return service.list_top(limit=limit, currency=currency)
 
 
-@st.cache_resource(ttl=_CACHE_TTL)
-def _cached_history(query: str, days: int, currency: str) -> Any:
-    """Cached wrapper around service.get_history()."""
+# El history tiene su propio TTL más largo: no estamos mirando ticks en vivo
+@st.cache_resource(ttl=_HISTORY_TTL)
+def _load_history(query: str, days: int, currency: str) -> Any:
+    """Precio histórico. Cacheamos 5 min porque esto no se mueve tan rápido."""
     return service.get_history(query, days=days, currency=currency)
 
 
 @st.cache_resource(ttl=_CACHE_TTL)
-def _cached_search(query: str) -> Any:
-    """Cached wrapper around service.search()."""
+def _load_search(query: str) -> Any:
+    """Busca monedas por nombre o símbolo."""
     return service.search(query)
 
 # ---------------------------------------------------------------------------
@@ -183,20 +185,9 @@ with st.sidebar:
         help="Moneda para mostrar los precios",
     )
 
-    # Refresh button
-    col_r1, col_r2 = st.columns([3, 1])
-    with col_r1:
-        if st.button("🔄 Refrescar datos", use_container_width=True, type="secondary"):
-            st.cache_resource.clear()
-            st.rerun()
-    with col_r2:
-        if st.button("🗑 Cache", help="Limpiar cache y recargar"):
-            st.cache_resource.clear()
-            st.rerun()
-
-    st.divider()
-
-    # API key status
+    # La cache expira sola. Si los datos están frescos, no pegamos otra llamada.
+    # TODO: en el futuro podríamos hacer un refresh silencioso en background
+    #       tipo "stale-while-revalidate", pero por ahora el TTL alcanza.
     has_key = bool(settings.coingecko_api_key)
     if has_key:
         st.markdown(
@@ -214,7 +205,7 @@ with st.sidebar:
 
     st.markdown(
         "<p style='text-align: center; opacity: 0.4; font-size: 0.7rem;'>"
-        "Powered by CoinGecko · Cache 60s</p>",
+        "Datos: CoinGecko</p>",
         unsafe_allow_html=True,
     )
 
@@ -256,20 +247,18 @@ def delta_color(change: float) -> Literal["normal", "inverse"]:
 # ---------------------------------------------------------------------------
 
 def show_error(e: CryptoTrackerError) -> None:
+    """Muestra el error al usuario sin darle botones raros de cache."""
     if isinstance(e, RateLimitError):
         if e.retry_after:
             st.error(
                 f"⏳ Límite de API alcanzado. Esperá {e.retry_after}s "
-                "o usá una API key gratuita en .env para más calls."
+                "y volvé a intentar, o configurá una API key en .env."
             )
         else:
             st.error(
                 "⏳ Límite de API alcanzado. Esperá un minuto "
-                "o usá una API key gratuita en .env para más calls."
+                "o configurá una API key gratuita en .env para más calls."
             )
-        if st.button("🔄 Reintentar ahora", key="retry_btn"):
-            st.cache_resource.clear()
-            st.rerun()
         return
 
     msg = {
@@ -306,9 +295,11 @@ if "Favoritos" in page:
     # Build a list of symbols
     fav_symbols = [f.symbol for f in fav_list]
 
+    # FIXME: si tenés 50 favoritos, esto pega un solo call a la API con 50 IDs.
+    #        CoinGecko lo banca, pero ojo con el rate limit si entrás muchas veces.
     with st.spinner("Cargando..."):
         try:
-            results = _cached_prices(tuple(fav_symbols), currency=currency)
+            results = _load_prices(tuple(fav_symbols), currency=currency)
         except CryptoTrackerError as e:
             show_error(e)
             st.stop()
@@ -366,9 +357,11 @@ elif "Precio" in page:
         )
 
     if query:
+        # TODO: si esto falla por rate limit, mostrar el último precio conocido
+        #       en vez de pantalla en blanco. Stale data > no data.
         with st.spinner("Consultando..."):
             try:
-                result = _cached_price(query.strip(), currency=currency)
+                result = _load_price(query.strip(), currency=currency)
             except CryptoTrackerError as e:
                 show_error(e)
                 st.stop()
@@ -436,13 +429,19 @@ elif "Precio" in page:
                     label_visibility="collapsed",
                 )[1]
 
+            # El history se pide aparte del precio para no trabar la página
+            # si la API está lenta o nos rate-limitaron. Si falla, mostramos
+            # lo que tenemos (el precio) y fue.
+            history: list[dict[str, float]] = []
             with st.spinner("Cargando historial..."):
                 try:
-                    history = _cached_history(
+                    history = _load_history(
                         query.strip(), days=days, currency=currency
                     )
+                except RateLimitError:
+                    st.caption("⏳ El histoŕico tuvo que esperar por rate limit. Cambiá de período en un toque.")
                 except CryptoTrackerError:
-                    history = []
+                    st.caption("No se pudo cargar el histórico ahora.")
 
             if history:
                 df_hist = pd.DataFrame(history)
@@ -519,7 +518,7 @@ elif "Top Monedas" in page:
 
     with st.spinner("Cargando..."):
         try:
-            results = _cached_top(limit, currency=currency)
+            results = _load_top(limit, currency=currency)
         except CryptoTrackerError as e:
             show_error(e)
             st.stop()
@@ -639,7 +638,7 @@ elif "Buscar" in page:
     if search_q:
         with st.spinner("Buscando..."):
             try:
-                coins = _cached_search(search_q.strip())
+                coins = _load_search(search_q.strip())
             except CryptoTrackerError as e:
                 show_error(e)
                 st.stop()
