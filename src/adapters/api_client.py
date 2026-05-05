@@ -8,6 +8,7 @@ CoinGecko API structure. If the API changes, you only change this file.
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -23,16 +24,57 @@ from src.core.exceptions import (
 )
 
 
+class TTLCache:
+    """
+    Simple in-memory cache with TTL and max size.
+
+    Stores API responses keyed by (endpoint, params) so we don't
+    hit the API for the same data twice within the TTL window.
+    """
+
+    def __init__(self, maxsize: int = 128, ttl: float = 30.0) -> None:
+        self._cache: OrderedDict[tuple, Any] = OrderedDict()
+        self._timestamps: dict[tuple, float] = {}
+        self._maxsize = maxsize
+        self._ttl = ttl
+
+    def get(self, key: tuple) -> Any | None:
+        """Return cached value or None if expired/missing."""
+        if key not in self._cache:
+            return None
+        if time.monotonic() - self._timestamps[key] > self._ttl:
+            del self._cache[key]
+            del self._timestamps[key]
+            return None
+        return self._cache[key]
+
+    def set(self, key: tuple, value: Any) -> None:
+        """Store a value with current timestamp."""
+        # Evict oldest if at capacity
+        if len(self._cache) >= self._maxsize:
+            oldest = next(iter(self._cache))
+            del self._cache[oldest]
+            del self._timestamps[oldest]
+        self._cache[key] = value
+        self._timestamps[key] = time.monotonic()
+
+    def clear(self) -> None:
+        """Invalidate all cached entries."""
+        self._cache.clear()
+        self._timestamps.clear()
+
+
 @dataclass
 class RateLimiter:
     """
     Simple rate limiter to avoid hitting API limits.
 
     Tracks request timestamps and sleeps if we're going too fast.
-    CoinGecko free tier: ~10-30 calls/min.
+    CoinGecko free tier without API key: ~10-30 calls/min.
+    We use 5/min to leave headroom.
     """
 
-    max_calls: int = 10  # max requests per window
+    max_calls: int = 5  # max requests per window (conservative for free tier)
     window_seconds: float = 60.0  # rolling window
     _timestamps: list[float] = field(default_factory=list)
 
@@ -71,11 +113,13 @@ class CoinGeckoClient:
         api_key: str = "",
         timeout: int = 10,
         rate_limiter: RateLimiter | None = None,
+        cache_ttl: float = 30.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
         self._rate_limiter = rate_limiter or RateLimiter()
+        self._cache = TTLCache(ttl=cache_ttl)
 
         # Configure session with retry strategy for transient errors
         retry_strategy = Retry(
@@ -183,8 +227,31 @@ class CoinGeckoClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def clear_cache(self) -> None:
+        """Invalidate all cached API responses."""
+        self._cache.clear()
+
+    def _cache_key(self, endpoint: str, params: dict[str, Any] | None) -> tuple:
+        """Build a hashable cache key from endpoint and params."""
+        if params:
+            # Sort params so same data always produces same key
+            sorted_params = tuple(sorted(params.items()))
+            return (endpoint, sorted_params)
+        return (endpoint,)
+
     def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> Any:
-        """Base GET request with consistent error handling."""
+        """
+        Base GET request with caching and consistent error handling.
+
+        Cache-aware: returns cached data if available (per-endpoint+params),
+        otherwise makes the HTTP request and caches the result.
+        """
+        # Check cache first
+        key = self._cache_key(endpoint, params)
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
         if self.api_key:
@@ -205,13 +272,14 @@ class CoinGeckoClient:
             raise NetworkError(original_error=exc) from exc
 
         if response.status_code == 429:
+            # Don't cache errors — clear cache and raise
+            self._cache.clear()
             retry_after = response.headers.get("Retry-After")
             raise RateLimitError(
                 retry_after=int(retry_after) if retry_after else None,
             )
 
         if response.status_code == 404:
-            # The endpoint itself wasn't found — not a coin issue
             raise APIError(
                 f"API endpoint not found: {endpoint}",
                 status_code=404,
@@ -224,13 +292,17 @@ class CoinGeckoClient:
             )
 
         try:
-            return response.json()
+            data = response.json()
         except requests.JSONDecodeError:
             snippet = response.text[:200]
             raise APIError(
                 f"Invalid JSON response (status {response.status_code}): {snippet}",
                 status_code=response.status_code,
             )
+
+        # Cache successful responses
+        self._cache.set(key, data)
+        return data
 
     def _validate_coin_response(
         self,
