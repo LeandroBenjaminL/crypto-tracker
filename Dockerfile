@@ -25,11 +25,12 @@ WORKDIR /app
 # Copiar pyproject.toml + README.md (hatchling necesita el readme)
 COPY pyproject.toml README.md ./
 # Instalar en modo normal (no editable — en Docker no hace falta)
-RUN pip install --no-cache-dir ".[dev]"
+RUN pip install --no-cache-dir ".[dev,postgres]"
 
 # Copiar el código fuente
 COPY src/ src/
 COPY app.py .
+COPY tests/ tests/
 
 # Puerto de la API (Streamlit usa 8501 por defecto)
 EXPOSE 8000 8501

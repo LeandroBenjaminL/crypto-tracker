@@ -33,10 +33,14 @@ dependencies = [
     "pandas>=2.0.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
+    "sqlalchemy>=2.0",
 ]
 
-# Dependencias para desarrollo (tests, linting, etc.)
+# Extras opcionales
 [project.optional-dependencies]
+postgres = [
+    "psycopg2-binary>=2.9",  # Driver PostgreSQL (solo si usás DB)
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -46,6 +50,7 @@ dev = [
     "mypy>=1.7.0",    # Tipado estático
     "pandas-stubs>=2.0.0",  # Type stubs para pandas (mypy)
     "types-requests>=2.31.0",  # Type stubs para requests (mypy)
+    "alembic>=1.13",  # Migraciones de base de datos
 ]
 
 # Script de entrada (cómo se ejecuta el CLI)

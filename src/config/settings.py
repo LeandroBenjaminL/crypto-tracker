@@ -50,6 +50,9 @@ class Settings:
     # --- Rate limiting & cache ---
     cache_ttl: int = 60  # seconds
 
+    # --- Database ---
+    database_url: str = ""  # Postgres: postgresql://user:pass@host:5432/dbname
+
     # --- Paths ---
     favorites_file: Path = field(
         default_factory=lambda: Path.home() / ".crypto_tracker.json"
@@ -90,4 +93,5 @@ def load_settings() -> Settings:
         ),
         default_currency=os.getenv("DEFAULT_CURRENCY", "usd"),
         cache_ttl=cache_ttl,
+        database_url=os.getenv("DATABASE_URL", ""),
     )

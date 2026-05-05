@@ -1,8 +1,9 @@
 # Crypto Tracker — Docker Compose
 #
-# Arranca dos servicios:
-#   1. api (FastAPI)   → http://localhost:8000  — documentación en /docs
-#   2. streamlit (UI)  → http://localhost:8501
+# Arranca tres servicios:
+#   1. db (PostgreSQL) → puerto 5432
+#   2. api (FastAPI)   → http://localhost:8000  — docs en /docs
+#   3. streamlit (UI)  → http://localhost:8501
 #
 # Uso:
 #   docker compose up -d          # arrancar en background
@@ -11,24 +12,39 @@
 
 services:
   # ------------------------------------------------------------------
+  # Base de datos (PostgreSQL)
+  # ------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cryptotracker
+      POSTGRES_PASSWORD: cryptotracker
+      POSTGRES_DB: cryptotracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - crypto_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cryptotracker"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ------------------------------------------------------------------
   # API REST (FastAPI)
   # ------------------------------------------------------------------
   api:
     build:
       context: .
-      # El Dockerfile default arranca uvicorn, así que no hace falta
-      # override del command acá.
     ports:
       - "8000:8000"
     environment:
-      # API key opcional — sin ella funciona igual, con rate limit más bajo.
-      # Seteala en tu terminal: export COINGECKO_API_KEY=tu_key
       - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
       - COINGECKO_BASE_URL=https://api.coingecko.com/api/v3
-    volumes:
-      # Los favoritos se guardan en un volumen para que persistan entre
-      # reinicios del contenedor.
-      - crypto_favorites:/root/.crypto_tracker.json
+      - DATABASE_URL=postgresql://cryptotracker:cryptotracker@db:5432/cryptotracker
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 10s
@@ -51,15 +67,11 @@ services:
       - "8501:8501"
     environment:
       # Apunta a la API por el nombre del servicio de Docker Compose.
-      # Docker resuelve "api" a la IP del contenedor de FastAPI.
       - API_BASE_URL=http://api:8000
     depends_on:
       api:
         condition: service_healthy
-    # Opcional: si tenés un .env, podés montarlo para que Streamlit lo vea:
-    # volumes:
-    #   - ./.env:/app/.env:ro
 
 volumes:
-  crypto_favorites:
-    # Volumen nombrado para persistir favoritos entre reinicios
+  crypto_pgdata:
+    # Volumen para persistir PostgreSQL entre reinicios

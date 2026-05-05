@@ -39,6 +39,25 @@ from src.core.models import (
 )
 from src.core.price_service import PriceService
 
+_logger = logging.getLogger("crypto-tracker.api")
+
+# Si hay DATABASE_URL configurada, intentamos PostgreSQL.
+# Si la DB no responde o hay error, caemos al JSON file de siempre
+# con un log para que el operador sepa que pasó.
+if settings.database_url:
+    try:
+        from src.adapters.database import FavoritesRepository
+
+        _favorites = FavoritesRepository(settings.database_url)
+        _favorites_source = "postgresql"
+    except Exception as exc:
+        _logger.warning("DB no disponible, usando JSON fallback: %s", exc)
+        _favorites = FavoritesManager()
+        _favorites_source = "json_fallback"
+else:
+    _favorites = FavoritesManager()
+    _favorites_source = "json"
+
 # ---------------------------------------------------------------------------
 # Schemas de respuesta — Pydantic, no dataclasses, porque FastAPI los serializa solo
 # ---------------------------------------------------------------------------
@@ -78,6 +97,7 @@ class HealthOut(BaseModel):
     status: str
     api_key_configured: bool
     version: str
+    favorites_source: str
 
 
 class ErrorOut(BaseModel):
@@ -94,7 +114,6 @@ class ErrorOut(BaseModel):
 # La API cachea 120s para que Streamlit no tenga que repreguntar tan seguido
 _client = CoinGeckoClient(api_key=settings.coingecko_api_key, cache_ttl=120.0)
 _service = PriceService(api_client=_client)
-_favorites = FavoritesManager()
 _VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
@@ -103,8 +122,6 @@ _VERSION = "0.2.0"
 
 _POPULAR_COINS = ["btc", "eth", "sol", "xrp", "ada", "doge", "dot", "avax", "link", "matic"]
 _POPULAR_DAYS = [7, 30, 90]
-
-_logger = logging.getLogger("crypto-tracker.api")
 
 
 def _precache() -> None:
@@ -350,9 +367,18 @@ def list_favorites() -> list[FavoriteOut]:
 )
 def add_favorite(symbol: str) -> FavoriteOut:
     """Guarda una moneda como favorita (idempotente)."""
-    _favorites.add(symbol)
+    normalized = symbol.strip().lower()
+    _favorites.add(normalized)
     favs = _favorites.list_all()
-    fav = next(f for f in favs if f.symbol == symbol.lower())
+    fav = next(
+        (f for f in favs if f.symbol == normalized),
+        None,
+    )
+    if fav is None:
+        raise HTTPException(
+            status_code=500,
+            detail="El favorito se agregó pero no se pudo verificar",
+        )
     return FavoriteOut(
         symbol=fav.symbol,
         added_at=fav.added_at.isoformat(),
@@ -386,4 +412,5 @@ def health() -> HealthOut:
         status="ok",
         api_key_configured=bool(settings.coingecko_api_key),
         version=_VERSION,
+        favorites_source=_favorites_source,
     )
