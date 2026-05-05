@@ -10,13 +10,17 @@ le pega a FastAPI que corre aparte. Esto da:
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import requests
 
 from src.core.exceptions import APIError, CoinNotFoundError, NetworkError, RateLimitError
 
-_API_BASE = "http://127.0.0.1:8000"
+# La URL base se configura vía variable de entorno.
+# En local: http://127.0.0.1:8000
+# En Docker: http://api:8000 (el nombre del servicio en docker-compose)
+_API_BASE = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 
 def _handle_response(response: requests.Response) -> Any:

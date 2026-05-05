@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Env (secrets — no queremos en la imagen)
+.env
+.env.example
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Ruff
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Favorites local (cada usuario tiene el suyo)
+.crypto_tracker.json
+
+# Docs de arquitectura (no necesarios para correr)
+ARCHITECTURE.md
+CHANGELOG.md
+CONTRIBUTING.md
+AUTHORS.md
+ROADMAP.md

@@ -28,6 +28,26 @@ coverage:
 pre-commit:
 	pre-commit run --all-files
 
+# Build Docker image
+docker-build:
+	docker build -t crypto-tracker .
+
+# Start all services in background
+docker-up:
+	docker compose up -d
+
+# Stop all services
+docker-down:
+	docker compose down
+
+# View logs in real-time
+docker-logs:
+	docker compose logs -f
+
+# Rebuild and restart
+docker-rebuild:
+	docker compose up -d --build
+
 # Remove cache files and coverage artifacts
 clean:
 	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' -o -name '.ruff_cache' \) -exec rm -rf {} + 2>/dev/null || true

@@ -1,0 +1,65 @@
+# Crypto Tracker — Docker Compose
+#
+# Arranca dos servicios:
+#   1. api (FastAPI)   → http://localhost:8000  — documentación en /docs
+#   2. streamlit (UI)  → http://localhost:8501
+#
+# Uso:
+#   docker compose up -d          # arrancar en background
+#   docker compose logs -f        # ver logs en vivo
+#   docker compose down           # parar todo
+
+services:
+  # ------------------------------------------------------------------
+  # API REST (FastAPI)
+  # ------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      # El Dockerfile default arranca uvicorn, así que no hace falta
+      # override del command acá.
+    ports:
+      - "8000:8000"
+    environment:
+      # API key opcional — sin ella funciona igual, con rate limit más bajo.
+      # Seteala en tu terminal: export COINGECKO_API_KEY=tu_key
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      - COINGECKO_BASE_URL=https://api.coingecko.com/api/v3
+    volumes:
+      # Los favoritos se guardan en un volumen para que persistan entre
+      # reinicios del contenedor.
+      - crypto_favorites:/root/.crypto_tracker.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ------------------------------------------------------------------
+  # Dashboard (Streamlit)
+  # ------------------------------------------------------------------
+  streamlit:
+    build:
+      context: .
+    command: >
+      streamlit run app.py
+      --server.port=8501
+      --server.headless=true
+      --server.enableCORS=true
+    ports:
+      - "8501:8501"
+    environment:
+      # Apunta a la API por el nombre del servicio de Docker Compose.
+      # Docker resuelve "api" a la IP del contenedor de FastAPI.
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    # Opcional: si tenés un .env, podés montarlo para que Streamlit lo vea:
+    # volumes:
+    #   - ./.env:/app/.env:ro
+
+volumes:
+  crypto_favorites:
+    # Volumen nombrado para persistir favoritos entre reinicios
