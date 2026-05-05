@@ -261,7 +261,7 @@ if "Favoritos" in page:
 # PAGE 2 — PRICE
 # ===================================================================
 
-if "Precio" in page:
+elif "Precio" in page:
 
     st.markdown("<h1>🔍  Precio</h1>", unsafe_allow_html=True)
     st.markdown(
@@ -305,8 +305,8 @@ if "Precio" in page:
             st.markdown(
                 f"<div class='card'>"
                 f"<h3>Precio Actual</h3>"
-                f"<div class='value {color_class}'>{fmt_price(pd.price)}</div>"
-                f"<div class='sub'>{arrow} {fmt_change(pd.change_24h)} (24h)</div>"
+                f"<div class='value {color_class}'>{fmt_price(price_d.price)}</div>"
+                f"<div class='sub'>{arrow} {fmt_change(price_d.change_24h)} (24h)</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -316,12 +316,12 @@ if "Precio" in page:
             with col1:
                 st.metric(
                     "Precio",
-                    fmt_price(pd.price),
-                    delta=fmt_change(pd.change_24h),
-                    delta_color=delta_color(pd.change_24h),
+                    fmt_price(price_d.price),
+                    delta=fmt_change(price_d.change_24h),
+                    delta_color=delta_color(price_d.change_24h),
                 )
             with col2:
-                st.metric("Cambio 24h", fmt_change(pd.change_24h))
+                st.metric("Cambio 24h", fmt_change(price_d.change_24h))
             with col3:
                 st.metric("Volumen 24h", fmt_cap(price_d.volume_24h) if price_d.volume_24h else "—")
             with col4:

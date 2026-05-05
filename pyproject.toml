@@ -30,6 +30,7 @@ dependencies = [
     "click>=8.1.0",
     "streamlit>=1.28.0",
     "plotly>=5.18.0",
+    "pandas>=2.0.0",
 ]
 
 # Dependencias para desarrollo (tests, linting, etc.)
@@ -41,6 +42,7 @@ dev = [
     "httpx>=0.25.0",  # Para tests de cliente HTTP
     "ruff>=0.1.0",    # Linter rápido
     "mypy>=1.7.0",    # Tipado estático
+    "pandas-stubs>=2.0.0",  # Type stubs para pandas (mypy)
 ]
 
 # Script de entrada (cómo se ejecuta el CLI)
