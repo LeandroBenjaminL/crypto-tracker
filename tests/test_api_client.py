@@ -195,7 +195,9 @@ class TestCoinGeckoClient:
 
         assert "30" in str(exc.value)
 
-    def test_rate_limit_error_no_retry_header(self, client: CoinGeckoClient, mock_session: MagicMock):
+    def test_rate_limit_error_no_retry_header(
+        self, client: CoinGeckoClient, mock_session: MagicMock
+    ):
         """Handle 429 without Retry-After header gracefully."""
         mock_session.get.return_value = _mock_response(
             {"error": "rate limited"},

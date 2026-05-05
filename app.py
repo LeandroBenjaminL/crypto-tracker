@@ -40,7 +40,8 @@ st.markdown("""
 <style>
     .main > div { padding: 0 1rem; }
     .stApp { background-color: #0E1117; }
-    
+
+
     .card {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         border-radius: 16px;
@@ -351,7 +352,9 @@ elif "Precio" in page:
 
             with st.spinner("Cargando historial..."):
                 try:
-                    history = service.get_history(query.strip(), days=days, currency=currency)
+                    history = service.get_history(
+                        query.strip(), days=days, currency=currency
+                    )
                 except CryptoTrackerError:
                     history = []
 

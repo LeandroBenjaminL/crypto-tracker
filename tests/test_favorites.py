@@ -1,7 +1,6 @@
 """
 Tests for the FavoritesManager.
 """
-
 from __future__ import annotations
 
 import json
