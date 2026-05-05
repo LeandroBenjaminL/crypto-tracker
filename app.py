@@ -4,26 +4,31 @@ Crypto Tracker — panel web en Streamlit.
 La misma lógica del CLI pero con gráficos interactivos.
 """
 
+"""
+Crypto Tracker — panel web en Streamlit.
+
+Ahora consume la API REST en vez de importar los services directo.
+Esto hace que los rerenders sean más livianos y el caché se comparta
+entre sesiones. La API arranca sola en un thread cuando abrís la app.
+"""
+
 from __future__ import annotations
 
+import threading
 from typing import Any, Literal
 
 import pandas as pd
-
-from src.config import settings
 import plotly.express as px  # type: ignore[import-untyped]
 import plotly.graph_objects as go  # type: ignore[import-untyped]
 import streamlit as st
 
-from src.adapters.api_client import CoinGeckoClient
+from src.api import client as api  # cliente HTTP contra nuestra propia API
 from src.core.exceptions import (
     CoinNotFoundError,
     CryptoTrackerError,
     NetworkError,
     RateLimitError,
 )
-from src.core.favorites import FavoritesManager
-from src.core.price_service import PriceService
 
 # ---------------------------------------------------------------------------
 # Page config (MUST be first Streamlit command)
@@ -165,68 +170,99 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Servicios globales (se crean una vez, viven en memoria de Streamlit)
+# Auto-arranque de la API
 #
-# Usamos cache_resource en vez de cache_data porque los objetos del dominio
-# (Cryptocurrency, PriceData) no se dejan pickle-izar. cache_resource los
-# mantiene en memoria con TTL y listo.
+# FastAPI arranca en un thread daemon cuando se inicia Streamlit.
+# Así el usuario solo ejecuta: streamlit run app.py
 # ---------------------------------------------------------------------------
 
-# El history es caro de pedir y cambia lento, lo cacheamos más tiempo
-_CACHE_TTL = 60       # price, search, top — son datos frescos
-_HISTORY_TTL = 300    # history — 5 min, los precios históricos no cambian tanto
+_API_PORT = 8000
 
 
+def _start_api() -> None:
+    """Levanta FastAPI en un thread separado."""
+    import uvicorn
+    uvicorn.run(
+        "src.api.server:app",
+        host="127.0.0.1",
+        port=_API_PORT,
+        log_level="warning",
+        reload=False,
+   )
+
+
+# Arrancamos la API si no está corriendo
 @st.cache_resource
-def get_service() -> PriceService:
-    client = CoinGeckoClient(
-        api_key=settings.coingecko_api_key,
-        cache_ttl=30.0,
-    )
-    return PriceService(api_client=client)
+def _ensure_api() -> bool:
+    """Verifica que la API esté viva, la arranca si no."""
+    import time
+
+    # Primero intentamos conectar
+    try:
+        status = api.health()
+        if status.get("status") == "ok":
+            return True
+    except Exception:
+        pass
+
+    # No está corriendo — la arrancamos
+    t = threading.Thread(target=_start_api, daemon=True)
+    t.start()
+
+    # Esperamos hasta 5s a que responda
+    for _ in range(25):
+        time.sleep(0.2)
+        try:
+            status = api.health()
+            if status.get("status") == "ok":
+                return True
+        except Exception:
+            continue
+
+    return False
 
 
-service = get_service()
+api_ok = _ensure_api()
+if not api_ok:
+    st.error("No se pudo arrancar la API. Reiniciá la app.")
+    st.stop()
 
 
-@st.cache_resource
-def get_favorites() -> FavoritesManager:
-    return FavoritesManager()
+# ---------------------------------------------------------------------------
+# Cache wrappers de Streamlit (TTL largo porque la API ya cachea por su cuenta)
+# ---------------------------------------------------------------------------
 
-
-favorites = get_favorites()
-
-
-# Cache wrappers con TTL — si está fresco, ni golpeamos la API
-@st.cache_resource(ttl=_CACHE_TTL)
-def _load_price(query: str, currency: str) -> Any:
-    """Pide el precio de una moneda."""
-    return service.get_price(query, currency=currency)
-
-
-@st.cache_resource(ttl=_CACHE_TTL)
-def _load_prices(queries: tuple[str, ...], currency: str) -> Any:
-    """Pide precios de varias monedas de una."""
-    return service.get_prices(list(queries), currency=currency)
-
-
-@st.cache_resource(ttl=_CACHE_TTL)
-def _load_top(limit: int, currency: str) -> Any:
-    """Top N monedas por market cap."""
-    return service.list_top(limit=limit, currency=currency)
-
-
-# El history tiene su propio TTL más largo: no estamos mirando ticks en vivo
-@st.cache_resource(ttl=_HISTORY_TTL)
-def _load_history(query: str, days: int, currency: str) -> Any:
-    """Precio histórico. Cacheamos 5 min porque esto no se mueve tan rápido."""
-    return service.get_history(query, days=days, currency=currency)
+_CACHE_TTL = 120  # 2 min — la API ya tiene su propio TTL, esto es extra
 
 
 @st.cache_resource(ttl=_CACHE_TTL)
-def _load_search(query: str) -> Any:
-    """Busca monedas por nombre o símbolo."""
-    return service.search(query)
+def _fetch_price(query: str, currency: str) -> Any:
+    """Precio desde la API."""
+    return api.get_price(query, currency=currency)
+
+
+@st.cache_resource(ttl=_CACHE_TTL)
+def _fetch_prices(queries: tuple[str, ...], currency: str) -> Any:
+    """Precios batch desde la API."""
+    return api.get_prices(list(queries), currency=currency)
+
+
+@st.cache_resource(ttl=_CACHE_TTL)
+def _fetch_top(limit: int, currency: str) -> Any:
+    """Top N desde la API."""
+    return api.get_top(limit=limit, currency=currency)
+
+
+@st.cache_resource(ttl=300)  # 5 min, datos históricos
+def _fetch_history(query: str, days: int, currency: str) -> Any:
+    """Histórico desde la API."""
+    return api.get_history(query, days=days, currency=currency)
+
+
+@st.cache_resource(ttl=_CACHE_TTL)
+def _fetch_search(query: str) -> Any:
+    """Búsqueda desde la API."""
+    return api.search(query)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -334,7 +370,7 @@ if "Favoritos" in page:
 
     st.markdown("<h1>⭐  Favoritos</h1>", unsafe_allow_html=True)
 
-    fav_list = favorites.list_all()
+    fav_list = api.list_favorites()
 
     if not fav_list:
         st.markdown(
@@ -346,46 +382,41 @@ if "Favoritos" in page:
         st.stop()
 
     # Build a list of symbols
-    fav_symbols = [f.symbol for f in fav_list]
+    fav_symbols = [f["symbol"] for f in fav_list]
 
-    # FIXME: si tenés 50 favoritos, esto pega un solo call a la API con 50 IDs.
-    #        CoinGecko lo banca, pero ojo con el rate limit si entrás muchas veces.
     with st.spinner("Cargando..."):
         try:
-            results = _load_prices(tuple(fav_symbols), currency=currency)
+            results = _fetch_prices(tuple(fav_symbols), currency=currency)
         except CryptoTrackerError as e:
             show_error(e)
             st.stop()
 
-    for result in results:
-        coin = result.coin
-        pd_data = result.price_data
-
+    for r in results:
         col_info, col_action = st.columns([4, 1])
         with col_info:
-            if pd_data:
-                is_up = pd_data.change_24h >= 0
+            if r.get("price") is not None:
+                is_up = r["change_24h"] >= 0 if r.get("change_24h") else True
                 arrow = "▲" if is_up else "▼"
                 color = "green" if is_up else "red"
                 st.markdown(
                     f"<div style='padding: 0.5rem 0;'>"
-                    f"<strong>{coin.name}</strong> "
-                    f"<span style='opacity: 0.5;'>{coin.symbol.upper()}</span><br>"
-                    f"<span class='{color}'>{fmt_price(pd_data.price)}  "
-                    f"{arrow} {fmt_change(pd_data.change_24h)}</span>"
+                    f"<strong>{r['name']}</strong> "
+                    f"<span style='opacity: 0.5;'>{r['symbol'].upper()}</span><br>"
+                    f"<span class='{color}'>{r.get('price_formatted', '')}  "
+                    f"{arrow} {fmt_change(r.get('change_24h', 0))}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
                     f"<div style='padding: 0.5rem 0;'>"
-                    f"<strong>{coin.name}</strong> "
+                    f"<strong>{r['name']}</strong> "
                     f"<span style='opacity: 0.6;'>Sin datos</span></div>",
                     unsafe_allow_html=True,
                 )
         with col_action:
-            if st.button("✕", key=f"del_{coin.symbol}", help=f"Quitar {coin.symbol.upper()}"):
-                favorites.remove(coin.symbol)
+            if st.button("✕", key=f"del_{r['symbol']}", help=f"Quitar {r['symbol'].upper()}"):
+                api.remove_favorite(r["symbol"])
                 st.rerun()
 
 # ===================================================================
@@ -410,27 +441,26 @@ elif "Precio" in page:
         )
 
     if query:
-        # TODO: si esto falla por rate limit, mostrar el último precio conocido
-        #       en vez de pantalla en blanco. Stale data > no data.
         with st.spinner("Consultando..."):
             try:
-                result = _load_price(query.strip(), currency=currency)
+                coin = _fetch_price(query.strip(), currency=currency)
             except CryptoTrackerError as e:
                 show_error(e)
                 st.stop()
 
-        if result.has_price() and result.price_data:
-            price_d = result.price_data
-            coin = result.coin
-            is_up = price_d.change_24h >= 0
+        has_price = coin.get("price") is not None
+        if has_price:
+            is_up = (coin.get("change_24h") or 0) >= 0
             color_class = "green" if is_up else "red"
             arrow = "▲" if is_up else "▼"
+            coin_price = coin.get("price", 0) or 0
+            coin_change = coin.get("change_24h", 0) or 0
 
             # Header
             st.markdown(
-                f"<h2 style='margin-bottom: 0;'>{coin.name} "
+                f"<h2 style='margin-bottom: 0;'>{coin['name']} "
                 f"<span style='opacity: 0.5; font-weight: 400;'>"
-                f"{coin.symbol.upper()}</span></h2>",
+                f"{coin['symbol'].upper()}</span></h2>",
                 unsafe_allow_html=True,
             )
 
@@ -438,8 +468,8 @@ elif "Precio" in page:
             st.markdown(
                 f"<div class='card'>"
                 f"<h3>Precio Actual</h3>"
-                f"<div class='value {color_class}'>{fmt_price(price_d.price)}</div>"
-                f"<div class='sub'>{arrow} {fmt_change(price_d.change_24h)} (24h)</div>"
+                f"<div class='value {color_class}'>{fmt_price(coin_price)}</div>"
+                f"<div class='sub'>{arrow} {fmt_change(coin_change)} (24h)</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -449,27 +479,30 @@ elif "Precio" in page:
             with col1:
                 st.metric(
                     "Precio",
-                    fmt_price(price_d.price),
-                    delta=fmt_change(price_d.change_24h),
-                    delta_color=delta_color(price_d.change_24h),
+                    fmt_price(coin_price),
+                    delta=fmt_change(coin_change),
+                    delta_color=delta_color(coin_change),
                 )
             with col2:
-                st.metric("Cambio 24h", fmt_change(price_d.change_24h))
+                st.metric("Cambio 24h", fmt_change(coin_change))
             with col3:
-                st.metric("Volumen 24h", fmt_cap(price_d.volume_24h) if price_d.volume_24h else "—")
+                vol = coin.get("volume_24h")
+                st.metric("Volumen 24h", fmt_cap(vol) if vol else "—")
             with col4:
-                st.metric("Market Cap", fmt_cap(price_d.market_cap) if price_d.market_cap else "—")
+                cap = coin.get("market_cap")
+                st.metric("Market Cap", fmt_cap(cap) if cap else "—")
 
             # Add/remove favorites button
-            coin_symbol = coin.symbol.lower()
-            is_fav = favorites.is_favorite(coin_symbol)
+            coin_symbol = coin["symbol"].lower()
+            favs = api.list_favorites()
+            is_fav = any(f["symbol"] == coin_symbol for f in favs)
             if is_fav:
                 if st.button("⭐ Quitar de favoritos", key=f"fav_del_{coin_symbol}"):
-                    favorites.remove(coin_symbol)
+                    api.remove_favorite(coin_symbol)
                     st.rerun()
             else:
                 if st.button("☆ Agregar a favoritos", key=f"fav_add_{coin_symbol}"):
-                    favorites.add(coin_symbol)
+                    api.add_favorite(coin_symbol)
                     st.rerun()
 
             # Historical chart
@@ -482,17 +515,16 @@ elif "Precio" in page:
                     label_visibility="collapsed",
                 )[1]
 
-            # El history se pide aparte del precio para no trabar la página
-            # si la API está lenta o nos rate-limitaron. Si falla, mostramos
-            # lo que tenemos (el precio) y fue.
+            # El history se pide aparte del precio para no trabar la página.
+            # Si la API rate-limit, mostramos caption y seguimos.
             history: list[dict[str, float]] = []
             with st.spinner("Cargando historial..."):
                 try:
-                    history = _load_history(
+                    history = _fetch_history(
                         query.strip(), days=days, currency=currency
                     )
                 except RateLimitError:
-                    st.caption("⏳ El histoŕico tuvo que esperar por rate limit. Cambiá de período en un toque.")
+                    st.caption("⏳ Esperá un toque y cambá de período de nuevo.")
                 except CryptoTrackerError:
                     st.caption("No se pudo cargar el histórico ahora.")
 
@@ -571,23 +603,22 @@ elif "Top Monedas" in page:
 
     with st.spinner("Cargando..."):
         try:
-            results = _load_top(limit, currency=currency)
+            results = _fetch_top(limit, currency=currency)
         except CryptoTrackerError as e:
             show_error(e)
             st.stop()
 
-    # Build DataFrame
+    # Build DataFrame — la API devuelve dicts, fácil
     rows = []
     for r in results:
-        pd_data = r.price_data
         rows.append({
-            "#": r.coin.rank,
-            "Nombre": r.coin.name,
-            "Símbolo": r.coin.symbol.upper(),
-            "Precio": pd_data.price if pd_data else 0,
-            "Cambio 24h": pd_data.change_24h if pd_data else 0,
-            "Market Cap": pd_data.market_cap if pd_data else 0,
-            "Volumen 24h": pd_data.volume_24h if pd_data else 0,
+            "#": r.get("rank", 0),
+            "Nombre": r.get("name", ""),
+            "Símbolo": r.get("symbol", "").upper(),
+            "Precio": r.get("price", 0) or 0,
+            "Cambio 24h": r.get("change_24h", 0) or 0,
+            "Market Cap": r.get("market_cap", 0) or 0,
+            "Volumen 24h": r.get("volume_24h", 0) or 0,
         })
 
     df = pd.DataFrame(rows)
@@ -691,7 +722,7 @@ elif "Buscar" in page:
     if search_q:
         with st.spinner("Buscando..."):
             try:
-                coins = _load_search(search_q.strip())
+                coins = _fetch_search(search_q.strip())
             except CryptoTrackerError as e:
                 show_error(e)
                 st.stop()
@@ -702,10 +733,10 @@ elif "Buscar" in page:
             rows = []
             for c in coins[:20]:
                 rows.append({
-                    "Nombre": c.name,
-                    "Símbolo": c.symbol.upper(),
-                    "ID (CoinGecko)": c.id,
-                    "Rank": f"#{c.rank}" if c.rank else "—",
+                    "Nombre": c["name"],
+                    "Símbolo": c["symbol"].upper(),
+                    "ID (CoinGecko)": c["id"],
+                    "Rank": f"#{c['rank']}" if c.get("rank") else "—",
                 })
             df = pd.DataFrame(rows)
 
