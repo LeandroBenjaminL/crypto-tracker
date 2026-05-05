@@ -11,6 +11,9 @@ Uso:
 
 from __future__ import annotations
 
+import logging
+import threading
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -93,6 +96,60 @@ _service = PriceService(api_client=_client)
 _favorites = FavoritesManager()
 _VERSION = "0.2.0"
 
+# ---------------------------------------------------------------------------
+# Precargar datos populares al arrancar
+# ---------------------------------------------------------------------------
+
+_POPULAR_COINS = ["btc", "eth", "sol", "xrp", "ada", "doge", "dot", "avax", "link", "matic"]
+_POPULAR_DAYS = [7, 30, 90]
+
+_logger = logging.getLogger("crypto-tracker.api")
+
+
+def _precache() -> None:
+    """
+    Pide datos populares en background cuando arranca la API.
+    Así la primera vez que el usuario consulta, ya está cacheado.
+    """
+    import time
+
+    _logger.info("Precargando datos populares...")
+
+    # 1. Top monedas (llena cache de list_top y precios comunes)
+    try:
+        _service.list_top(limit=20)
+        _logger.info("  ✓ Top 20 monedas precargado")
+    except Exception as e:
+        _logger.warning(f"  ✗ Top 20 falló: {e}")
+
+    # 2. Precios de monedas populares (llena cache de get_price)
+    for symbol in _POPULAR_COINS:
+        try:
+            _service.get_price(symbol)
+            _logger.info(f"  ✓ Precio de {symbol}")
+        except Exception as e:
+            _logger.warning(f"  ✗ Precio de {symbol} falló: {e}")
+        time.sleep(0.5)  # separar calls para no clavar rate limit
+
+    # 3. Histórico de BTC para períodos comunes
+    for days in _POPULAR_DAYS:
+        try:
+            _service.get_history("bitcoin", days=days)
+            _logger.info(f"  ✓ Histórico BTC {days}d")
+        except Exception as e:
+            _logger.warning(f"  ✗ Histórico BTC {days}d falló: {e}")
+        time.sleep(0.5)
+
+    _logger.info("Precarga completa.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> None:
+    """Arranca la precarga en background cuando levanta la API."""
+    t = threading.Thread(target=_precache, daemon=True)
+    t.start()
+    yield
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,10 +199,12 @@ app = FastAPI(
     description="""
     API REST para追踪ar precios de criptomonedas.
     Se basa en CoinGecko y expone los mismos datos que el CLI y el dashboard.
+    Al arrancar precarga datos populares para que responda más rápido.
     """,
     version=_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS — abierto para desarrollo, en prod se restringe
