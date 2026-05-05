@@ -20,6 +20,48 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Development Tools
+
+We use a `Makefile` to standardize common development tasks. All targets work on Linux, macOS, and WSL.
+
+| Command | Description |
+|---------|-------------|
+| `make install` | Install the package with dev dependencies |
+| `make test` | Run the test suite |
+| `make lint` | Run ruff linter on `src/`, `app.py`, and `tests/` |
+| `make fmt` | Run ruff formatter on `src/`, `app.py`, and `tests/` |
+| `make typecheck` | Run mypy type checker on `src/` and `app.py` |
+| `make coverage` | Run tests with HTML and terminal coverage reports |
+| `make pre-commit` | Run all pre-commit hooks on all files |
+| `make clean` | Remove `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.coverage`, and `htmlcov` |
+
+## Pre-commit Hooks
+
+We use [pre-commit](https://pre-commit.com/) to run checks automatically before each commit. Install it separately if you haven't already:
+
+```bash
+pip install pre-commit
+```
+
+Install the git hooks (one-time setup):
+
+```bash
+pre-commit install
+```
+
+Run manually on all files:
+
+```bash
+make pre-commit
+```
+
+The following checks run automatically on every commit:
+
+- `ruff check --fix` — linting with auto-fixes
+- `ruff format` — code formatting
+- `mypy src/` — static type checking
+- `pytest --no-header -q` — quick test run
+
 ## Code Style
 
 We use `ruff` for linting and `mypy` for type checking:
