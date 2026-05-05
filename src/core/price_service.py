@@ -10,7 +10,7 @@ business rule without touching the network.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from src.core.exceptions import APIError, CoinNotFoundError, ValidationError
 from src.core.models import (
@@ -359,7 +359,7 @@ class PriceService:
         try:
             results = self._client.search_coin(normalized)
             if results:
-                return results[0]["id"]
+                return cast(str, results[0]["id"])
         except (APIError, CoinNotFoundError):
             pass  # fall through — let the real API call fail naturally
 

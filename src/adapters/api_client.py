@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -118,7 +118,7 @@ class CoinGeckoClient:
 
         data = self._get("/simple/price", params)
         self._validate_coin_response(coin_ids, data)
-        return data
+        return cast(dict[str, Any], data)
 
     def get_top_coins(
         self,

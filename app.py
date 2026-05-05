@@ -6,9 +6,11 @@ Visual interface for the crypto-tracker engine.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import plotly.express as px  # type: ignore[import-untyped]
+import plotly.graph_objects as go  # type: ignore[import-untyped]
 import streamlit as st
 
 from src.adapters.api_client import CoinGeckoClient
@@ -176,7 +178,7 @@ def fmt_cap(value: float) -> str:
         return f"${value:,.0f}"
 
 
-def delta_color(change: float) -> str:
+def delta_color(change: float) -> Literal["normal", "inverse"]:
     return "normal" if change >= 0 else "inverse"
 
 
@@ -465,10 +467,10 @@ elif "Top Monedas" in page:
     styled = (
         df.style
         .format({
-            "Precio": lambda x: fmt_price(x),
-            "Cambio 24h": lambda x: fmt_change(x),
-            "Market Cap": lambda x: fmt_cap(x),
-            "Volumen 24h": lambda x: fmt_cap(x),
+            "Precio": lambda x: fmt_price(float(x)),
+            "Cambio 24h": lambda x: fmt_change(float(x)),
+            "Market Cap": lambda x: fmt_cap(float(x)),
+            "Volumen 24h": lambda x: fmt_cap(float(x)),
         })
         .map(color_change, subset=["Cambio 24h"])
         .set_properties(**{
@@ -573,7 +575,7 @@ elif "Buscar" in page:
 
             styled = (
                 df.style
-                .set_properties(**{
+                .set_properties(**{  # type: ignore[arg-type]
                     "background-color": "#1a1a2e",
                     "color": "#f0f0f0",
                     "border-color": "#2a2a4a",

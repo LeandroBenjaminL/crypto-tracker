@@ -43,6 +43,7 @@ dev = [
     "ruff>=0.1.0",    # Linter rápido
     "mypy>=1.7.0",    # Tipado estático
     "pandas-stubs>=2.0.0",  # Type stubs para pandas (mypy)
+    "types-requests>=2.31.0",  # Type stubs para requests (mypy)
 ]
 
 # Script de entrada (cómo se ejecuta el CLI)
