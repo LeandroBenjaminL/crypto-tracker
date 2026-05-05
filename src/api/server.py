@@ -91,7 +91,8 @@ class ErrorOut(BaseModel):
 # Services singleton
 # ---------------------------------------------------------------------------
 
-_client = CoinGeckoClient(api_key=settings.coingecko_api_key, cache_ttl=30.0)
+# La API cachea 120s para que Streamlit no tenga que repreguntar tan seguido
+_client = CoinGeckoClient(api_key=settings.coingecko_api_key, cache_ttl=120.0)
 _service = PriceService(api_client=_client)
 _favorites = FavoritesManager()
 _VERSION = "0.2.0"
@@ -108,37 +109,53 @@ _logger = logging.getLogger("crypto-tracker.api")
 
 def _precache() -> None:
     """
-    Pide datos populares en background cuando arranca la API.
-    Así la primera vez que el usuario consulta, ya está cacheado.
+    Precarga datos populares en background con SU PROPIO rate limiter.
+    No interfiere con las requests del usuario — usa un cliente aparte.
+    Si no hay rate limit disponible, saltea y espera.
     """
     import time
 
-    _logger.info("Precargando datos populares...")
+    from src.adapters.api_client import CoinGeckoClient, RateLimiter
+    from src.core.price_service import PriceService
 
-    # 1. Top monedas (llena cache de list_top y precios comunes)
+    # Cliente exclusivo para precarga — no bloquea al principal
+    precache_client = CoinGeckoClient(
+        api_key=settings.coingecko_api_key,
+        cache_ttl=30.0,
+        rate_limiter=RateLimiter(
+            max_calls=2,        # solo 2 calls por ventana para dejar lugar al usuario
+            window_seconds=60.0,
+            max_wait=30.0,      # espera hasta 30s si no hay cupo
+        ),
+    )
+    precache_service = PriceService(api_client=precache_client)
+
+    _logger.info("Precargando datos populares (background)...")
+
+    # 1. Top 20 — llena cache de list_top
     try:
-        _service.list_top(limit=20)
-        _logger.info("  ✓ Top 20 monedas precargado")
+        precache_service.list_top(limit=20)
+        _logger.info("  ✓ Top 20 listo")
     except Exception as e:
-        _logger.warning(f"  ✗ Top 20 falló: {e}")
+        _logger.warning(f"  Top 20: {e}")
 
-    # 2. Precios de monedas populares (llena cache de get_price)
+    # 2. Precios de monedas populares
     for symbol in _POPULAR_COINS:
         try:
-            _service.get_price(symbol)
-            _logger.info(f"  ✓ Precio de {symbol}")
-        except Exception as e:
-            _logger.warning(f"  ✗ Precio de {symbol} falló: {e}")
-        time.sleep(0.5)  # separar calls para no clavar rate limit
+            precache_service.get_price(symbol)
+            _logger.info(f"  ✓ {symbol}")
+        except Exception:
+            pass  # si rate limit, lo intenta después
+        time.sleep(1)
 
     # 3. Histórico de BTC para períodos comunes
     for days in _POPULAR_DAYS:
         try:
-            _service.get_history("bitcoin", days=days)
-            _logger.info(f"  ✓ Histórico BTC {days}d")
-        except Exception as e:
-            _logger.warning(f"  ✗ Histórico BTC {days}d falló: {e}")
-        time.sleep(0.5)
+            precache_service.get_history("bitcoin", days=days)
+            _logger.info(f"  ✓ BTC {days}d")
+        except Exception:
+            pass
+        time.sleep(1)
 
     _logger.info("Precarga completa.")
 
