@@ -42,53 +42,124 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* Fondo general — degradé sutil */
+    .stApp {
+        background: linear-gradient(160deg, #0a0e1a 0%, #0f1525 50%, #0a0e1a 100%);
+    }
     .main > div { padding: 0 1rem; }
-    .stApp { background-color: #0E1117; }
 
-
-    .card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    /* Tarjetas con efecto glassmorphism */
+    div[data-testid="stMetric"],
+    .element-container:has(.card) {
+        background: rgba(26, 26, 46, 0.7);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         border-radius: 16px;
-        padding: 1.5rem;
-        border: 1px solid #2a2a4a;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        margin-bottom: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        padding: 0.5rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    div[data-testid="stMetric"]:hover,
+    .element-container:has(.card):hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Card personalizada */
+    .card {
+        padding: 1rem;
     }
     .card h3 {
         color: #e0e0e0;
         margin: 0 0 0.5rem 0;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         text-transform: uppercase;
-        letter-spacing: 1px;
-        opacity: 0.7;
+        letter-spacing: 1.5px;
+        opacity: 0.6;
     }
     .card .value {
         font-size: 2rem;
         font-weight: 700;
         margin: 0;
+        letter-spacing: -0.5px;
     }
     .card .sub {
-        font-size: 0.9rem;
-        opacity: 0.6;
+        font-size: 0.85rem;
+        opacity: 0.5;
         margin-top: 0.25rem;
     }
+
+    /* Colores de cambio */
     .green { color: #00d4aa; }
     .red { color: #ff6b6b; }
-    .white { color: #f0f0f0; }
 
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    section[data-testid="stSidebar"] .stRadio label {
+        padding: 0.5rem 0.75rem;
+        border-radius: 10px;
+        transition: background 0.15s ease;
+    }
+    section[data-testid="stSidebar"] .stRadio label:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
+        background: rgba(0, 212, 170, 0.1);
+        border: 1px solid rgba(0, 212, 170, 0.2);
+        border-radius: 10px;
+    }
+
+    /* Métricas */
     div[data-testid="stMetricValue"] {
-        font-size: 2rem !important;
+        font-size: 1.8rem !important;
         font-weight: 700 !important;
+        letter-spacing: -0.5px;
     }
     div[data-testid="stMetricDelta"] {
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
     }
     .st-bw { background-color: transparent !important; }
 
-    h1, h2, h3 { color: #f0f0f0 !important; }
+    /* Tipografía general */
+    h1, h2, h3 {
+        color: #f0f0f0 !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.3px;
+    }
+    h1 { font-size: 1.8rem !important; }
+    h2 { font-size: 1.4rem !important; }
+
+    /* Selects y sliders */
     .stSelectbox label, .stRadio label, .stSlider label {
         color: #aaa !important;
-        font-size: 0.85rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* Botones */
+    .stButton button {
+        border-radius: 10px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* DataFrame */
+    .stDataFrame [data-testid="stTable"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    /* Divisor */
+    hr {
+        border-color: rgba(255, 255, 255, 0.06) !important;
+        margin: 1.5rem 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
