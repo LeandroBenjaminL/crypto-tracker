@@ -256,26 +256,8 @@ with st.sidebar:
         help="Moneda para mostrar los precios",
     )
 
-    # La cache expira sola. Si los datos están frescos, no pegamos otra llamada.
-    # TODO: en el futuro podríamos hacer un refresh silencioso en background
-    #       tipo "stale-while-revalidate", pero por ahora el TTL alcanza.
-    has_key = bool(settings.coingecko_api_key)
-    if has_key:
-        st.markdown(
-            "<p style='font-size:0.75rem; color:#56d4a0; text-align:center;'>"
-            "🔑 API key conectada &nbsp;·&nbsp; 50 calls/min</p>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<p style='font-size:0.75rem; color:#f0c060; text-align:center;'>"
-            "⚠️ Sin API key &nbsp;·&nbsp; <a href='https://www.coingecko.com/en/api' "
-            "target='_blank' style='color:#5e9bff;'>Conseguí una gratis</a></p>",
-            unsafe_allow_html=True,
-        )
-
     st.markdown(
-        "<p style='text-align: center; opacity: 0.4; font-size: 0.7rem;'>"
+        "<p style='text-align: center; opacity: 0.4; font-size: 0.75rem;'>"
         "Datos: CoinGecko</p>",
         unsafe_allow_html=True,
     )
