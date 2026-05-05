@@ -376,7 +376,8 @@ elif "Precio" in page:
                         width=2,
                     ),
                     fill="tozeroy",
-                    fillcolor="rgba(0,212,170,0.08)" if hist_change >= 0 else "rgba(255,107,107,0.08)",
+                    fillcolor=("rgba(0,212,170,0.08)" if hist_change >= 0
+                               else "rgba(255,107,107,0.08)"),
                 ))
                 fig.update_layout(
                     height=350,
