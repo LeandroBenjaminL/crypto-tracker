@@ -467,13 +467,13 @@ elif "Top Monedas" in page:
     styled = (
         df.style
         .format({
-            "Precio": lambda x: fmt_price(float(x)),
-            "Cambio 24h": lambda x: fmt_change(float(x)),
-            "Market Cap": lambda x: fmt_cap(float(x)),
-            "Volumen 24h": lambda x: fmt_cap(float(x)),
+            "Precio": lambda x: fmt_price(float(x)),  # type: ignore[arg-type]
+            "Cambio 24h": lambda x: fmt_change(float(x)),  # type: ignore[arg-type]
+            "Market Cap": lambda x: fmt_cap(float(x)),  # type: ignore[arg-type]
+            "Volumen 24h": lambda x: fmt_cap(float(x)),  # type: ignore[arg-type]
         })
-        .map(color_change, subset=["Cambio 24h"])
-        .set_properties(**{
+        .map(color_change, subset=["Cambio 24h"])  # type: ignore[arg-type]
+        .set_properties(**{  # type: ignore[arg-type]
             "background-color": "#1a1a2e",
             "color": "#f0f0f0",
             "border-color": "#2a2a4a",
