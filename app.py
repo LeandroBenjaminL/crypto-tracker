@@ -9,6 +9,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import pandas as pd
+
+from src.config import settings
 import plotly.express as px  # type: ignore[import-untyped]
 import plotly.graph_objects as go  # type: ignore[import-untyped]
 import streamlit as st
@@ -177,13 +179,38 @@ with st.sidebar:
         help="Moneda para mostrar los precios",
     )
 
-    if st.button("🔄 Refrescar datos", use_container_width=True, type="secondary"):
-        st.rerun()
+    # Refresh button
+    col_r1, col_r2 = st.columns([3, 1])
+    with col_r1:
+        if st.button("🔄 Refrescar datos", use_container_width=True, type="secondary"):
+            st.cache_data.clear()
+            st.rerun()
+    with col_r2:
+        if st.button("🗑 Cache", help="Limpiar cache y recargar"):
+            st.cache_data.clear()
+            st.rerun()
 
     st.divider()
+
+    # API key status
+    has_key = bool(settings.coingecko_api_key)
+    if has_key:
+        st.markdown(
+            "<p style='font-size:0.75rem; color:#56d4a0; text-align:center;'>"
+            "🔑 API key conectada &nbsp;·&nbsp; 50 calls/min</p>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<p style='font-size:0.75rem; color:#f0c060; text-align:center;'>"
+            "⚠️ Sin API key &nbsp;·&nbsp; <a href='https://www.coingecko.com/en/api' "
+            "target='_blank' style='color:#5e9bff;'>Conseguí una gratis</a></p>",
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
-        "<p style='text-align: center; opacity: 0.4; font-size: 0.75rem;'>"
-        "Powered by CoinGecko</p>",
+        "<p style='text-align: center; opacity: 0.4; font-size: 0.7rem;'>"
+        "Powered by CoinGecko · Cache 60s</p>",
         unsafe_allow_html=True,
     )
 
