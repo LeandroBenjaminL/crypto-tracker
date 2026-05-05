@@ -119,34 +119,38 @@ favorites = get_favorites()
 
 # ---------------------------------------------------------------------------
 # Streamlit cache layer — prevents re-fetching on every rerun
+#
+# Usamos cache_resource (no cache_data) porque los objetos del dominio
+# (CoinSearchResult, Cryptocurrency, PriceData) no son pickle-serializables.
+# cache_resource mantiene la referencia en memoria con TTL.
 # ---------------------------------------------------------------------------
 
 
-@st.cache_data(ttl=_CACHE_TTL)
+@st.cache_resource(ttl=_CACHE_TTL)
 def _cached_price(query: str, currency: str) -> Any:
     """Cached wrapper around service.get_price()."""
     return service.get_price(query, currency=currency)
 
 
-@st.cache_data(ttl=_CACHE_TTL)
+@st.cache_resource(ttl=_CACHE_TTL)
 def _cached_prices(queries: tuple[str, ...], currency: str) -> Any:
     """Cached wrapper around service.get_prices()."""
     return service.get_prices(list(queries), currency=currency)
 
 
-@st.cache_data(ttl=_CACHE_TTL)
+@st.cache_resource(ttl=_CACHE_TTL)
 def _cached_top(limit: int, currency: str) -> Any:
     """Cached wrapper around service.list_top()."""
     return service.list_top(limit=limit, currency=currency)
 
 
-@st.cache_data(ttl=_CACHE_TTL)
+@st.cache_resource(ttl=_CACHE_TTL)
 def _cached_history(query: str, days: int, currency: str) -> Any:
     """Cached wrapper around service.get_history()."""
     return service.get_history(query, days=days, currency=currency)
 
 
-@st.cache_data(ttl=_CACHE_TTL)
+@st.cache_resource(ttl=_CACHE_TTL)
 def _cached_search(query: str) -> Any:
     """Cached wrapper around service.search()."""
     return service.search(query)
@@ -183,11 +187,11 @@ with st.sidebar:
     col_r1, col_r2 = st.columns([3, 1])
     with col_r1:
         if st.button("🔄 Refrescar datos", use_container_width=True, type="secondary"):
-            st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
     with col_r2:
         if st.button("🗑 Cache", help="Limpiar cache y recargar"):
-            st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
 
     st.divider()
@@ -264,7 +268,7 @@ def show_error(e: CryptoTrackerError) -> None:
                 "o usá una API key gratuita en .env para más calls."
             )
         if st.button("🔄 Reintentar ahora", key="retry_btn"):
-            st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
         return
 
