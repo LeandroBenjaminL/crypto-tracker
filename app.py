@@ -6,7 +6,7 @@ Visual interface for the crypto-tracker engine.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 import plotly.express as px  # type: ignore[import-untyped]
