@@ -400,6 +400,7 @@ elif "Precio" in page:
             "Moneda",
             placeholder="Ej: btc, ethereum, SOL, doge...",
             label_visibility="collapsed",
+            key="price_query_input",
         )
 
     if query:
@@ -478,70 +479,74 @@ elif "Precio" in page:
                 )[1]
 
             # El history se pide aparte del precio para no trabar la página.
-            # Si la API rate-limit, mostramos caption y seguimos.
+            # TODO: el container con key evita el bug 'removeChild' de Streamlit
+            #       al reemplazar el gráfico entre renders.
+            chart_key = f"chart_{query.strip()}_{days}"
+            chart_zone = st.container(key=chart_key)
             history: list[dict[str, float]] = []
-            with st.spinner("Cargando historial..."):
-                try:
-                    history = _fetch_history(
-                        query.strip(), days=days, currency=currency
+            with chart_zone:
+                with st.spinner("Cargando historial..."):
+                    try:
+                        history = _fetch_history(
+                            query.strip(), days=days, currency=currency
+                        )
+                    except RateLimitError:
+                        st.caption("⏳ Esperá un toque y cambá de período de nuevo.")
+                    except CryptoTrackerError:
+                        st.caption("No se pudo cargar el histórico ahora.")
+
+                if history:
+                    df_hist = pd.DataFrame(history)
+                    df_hist["timestamp"] = pd.to_datetime(df_hist["timestamp"], unit="ms")
+                    start_price = df_hist["price"].iloc[0]
+                    end_price = df_hist["price"].iloc[-1]
+                    hist_change = ((end_price - start_price) / start_price) * 100
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df_hist["timestamp"],
+                        y=df_hist["price"],
+                        mode="lines",
+                        name="Precio",
+                        line=dict(
+                            color="#00d4aa" if hist_change >= 0 else "#ff6b6b",
+                            width=2,
+                        ),
+                        fill="tozeroy",
+                        fillcolor=("rgba(0,212,170,0.08)" if hist_change >= 0
+                                   else "rgba(255,107,107,0.08)"),
+                    ))
+                    fig.update_layout(
+                        height=350,
+                        margin=dict(l=0, r=0, t=10, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(
+                            showgrid=False,
+                            color="#666",
+                            showspikes=True,
+                            spikethickness=1,
+                            spikedash="dot",
+                        ),
+                        yaxis=dict(
+                            showgrid=True,
+                            gridcolor="#2a2a4a",
+                            color="#666",
+                            tickprefix="$",
+                        ),
+                        hovermode="x unified",
                     )
-                except RateLimitError:
-                    st.caption("⏳ Esperá un toque y cambá de período de nuevo.")
-                except CryptoTrackerError:
-                    st.caption("No se pudo cargar el histórico ahora.")
+                    st.plotly_chart(fig, use_container_width=True, key=f"hist_{query}_{days}")
 
-            if history:
-                df_hist = pd.DataFrame(history)
-                df_hist["timestamp"] = pd.to_datetime(df_hist["timestamp"], unit="ms")
-                start_price = df_hist["price"].iloc[0]
-                end_price = df_hist["price"].iloc[-1]
-                hist_change = ((end_price - start_price) / start_price) * 100
-
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=df_hist["timestamp"],
-                    y=df_hist["price"],
-                    mode="lines",
-                    name="Precio",
-                    line=dict(
-                        color="#00d4aa" if hist_change >= 0 else "#ff6b6b",
-                        width=2,
-                    ),
-                    fill="tozeroy",
-                    fillcolor=("rgba(0,212,170,0.08)" if hist_change >= 0
-                               else "rgba(255,107,107,0.08)"),
-                ))
-                fig.update_layout(
-                    height=350,
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(
-                        showgrid=False,
-                        color="#666",
-                        showspikes=True,
-                        spikethickness=1,
-                        spikedash="dot",
-                    ),
-                    yaxis=dict(
-                        showgrid=True,
-                        gridcolor="#2a2a4a",
-                        color="#666",
-                        tickprefix="$",
-                    ),
-                    hovermode="x unified",
-                )
-                st.plotly_chart(fig, use_container_width=True, key=f"hist_{query}_{days}")
-
-                st.markdown(
-                    f"<p style='opacity: 0.5; font-size: 0.8rem; text-align: center;'>"
-                    f"Variación en el período: "
-                    f"<span class='{'green' if hist_change >= 0 else 'red'}'>"
-                    f"{'▲' if hist_change >= 0 else '▼'} {abs(hist_change):.2f}%</span></p>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption("No hay datos históricos disponibles.")
+                    st.markdown(
+                        f"<p style='opacity: 0.5; font-size: 0.8rem; text-align: center;'>"
+                        f"Variación en el período: "
+                        f"<span class='{'green' if hist_change >= 0 else 'red'}'>"
+                        f"{'▲' if hist_change >= 0 else '▼'} {abs(hist_change):.2f}%</span></p>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.caption("No hay datos históricos disponibles.")
 
         else:
             st.warning("No hay datos de precio para esta moneda.")
