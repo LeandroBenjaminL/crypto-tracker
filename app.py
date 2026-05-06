@@ -100,9 +100,9 @@ _LIGHT_VARS = """
 # Inyectamos las variables según el tema actual
 _theme_vars = _DARK_VARS if st.session_state.get("theme", "dark") == "dark" else _LIGHT_VARS
 
-st.markdown(f"""
+st.markdown("""
 <style>
-    :root {{ {_theme_vars} }}
+    :root {THEME_VARS}
 
     /* ═══════════════════════════════════════════════
        ESTILOS GENERALES (compartidos por ambos temas)
@@ -228,7 +228,7 @@ st.markdown(f"""
         margin: 1.5rem 0 !important;
     }
 </style>
-""", unsafe_allow_html=True)
+""".replace("{THEME_VARS}", _theme_vars), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Detección de tema (dark / light)
