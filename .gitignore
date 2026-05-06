@@ -12,6 +12,9 @@ env/
 # Environment variables (keep secrets safe)
 .env
 
+# Streamlit secrets (the actual file, not the example)
+.streamlit/secrets.toml
+
 # Distribution / packaging
 dist/
 build/

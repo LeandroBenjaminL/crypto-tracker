@@ -9,12 +9,24 @@ comparta entre sesiones.
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Config: API_BASE_URL desde secrets de Streamlit Cloud o env var
+# ---------------------------------------------------------------------------
+import os
 from typing import Any, Literal
 
 import pandas as pd
 import plotly.express as px  # type: ignore[import-untyped]
 import plotly.graph_objects as go  # type: ignore[import-untyped]
 import streamlit as st
+
+if not os.getenv("API_BASE_URL"):
+    try:
+        api_url = st.secrets.get("API_BASE_URL")
+        if api_url:
+            os.environ["API_BASE_URL"] = api_url
+    except Exception:
+        pass  # no hay secrets (desarrollo local)
 
 from src.api import client as api  # cliente HTTP contra nuestra propia API
 from src.core.exceptions import (
