@@ -555,5 +555,11 @@ def main() -> None:
     cli()
 
 
+def run_telegram() -> None:
+    """Entry point for the Telegram bot."""
+    from src.telegram.bot import main as telegram_main
+    telegram_main()
+
+
 if __name__ == "__main__":
     main()

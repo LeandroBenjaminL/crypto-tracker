@@ -45,5 +45,6 @@ EXPOSE 8000 8501
 CMD ["sh", "-c", "case ${ENTRYPOINT:-api} in \
   pipeline) crypto-tracker pipeline ;; \
   streamlit) streamlit run app.py ;; \
+  telegram) crypto-tracker-telegram ;; \
   *) uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000} ;; \
 esac"]

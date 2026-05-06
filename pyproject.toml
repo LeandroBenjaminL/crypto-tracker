@@ -34,6 +34,7 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
     "sqlalchemy>=2.0",
+    "python-telegram-bot>=20.0",
 ]
 
 # Extras opcionales
@@ -56,6 +57,7 @@ dev = [
 # Script de entrada (cómo se ejecuta el CLI)
 [project.scripts]
 crypto-tracker = "src.cli.commands:main"
+crypto-tracker-telegram = "src.cli.commands:run_telegram"
 
 # Configuración de herramientas
 [tool.pytest.ini_options]
