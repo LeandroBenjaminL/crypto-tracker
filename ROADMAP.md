@@ -166,28 +166,81 @@ This roadmap tracks the development phases of the Crypto Tracker project. Each p
 
 ---
 
+## Phase 11: REST API + Docker ✅
+**Goal: Multi-layer architecture with API gateway**
+
+- [x] FastAPI REST layer (`src/api/server.py`) with 8 endpoints
+- [x] OpenAPI docs at `/docs` and `/redoc`
+- [x] Pydantic response schemas (`CoinOut`, `HistoryPoint`, `FavoriteOut`)
+- [x] Exception-to-HTTP mapping for all domain errors
+- [x] Precarga de datos populares en background thread
+- [x] HTTP client for Streamlit (`src/api/client.py`)
+- [x] `run.py` launcher (arranca API + Streamlit juntos)
+- [x] Tests with FastAPI TestClient
+
+**Learning Objectives:**
+- FastAPI patterns and dependency injection
+- OpenAPI automatic documentation
+- Background task management with threading
+- HTTP client architecture
+
+---
+
+## Phase 12: PostgreSQL + Docker Compose ✅
+**Goal: Production-ready infrastructure**
+
+- [x] `FavoritesRepository` with SQLAlchemy 2.0
+- [x] PostgreSQL via Docker Compose
+- [x] Graceful degradation (DB fallback → JSON)
+- [x] SQLite in-memory for testing
+- [x] Dockerfile with multi-entrypoint (API / Streamlit)
+- [x] Docker Compose with 3 services (db + api + streamlit)
+- [x] Healthchecks for all services
+- [x] Makefile with docker commands
+
+**Learning Objectives:**
+- SQLAlchemy 2.0 ORM
+- Repository pattern
+- Docker multi-stage builds
+- Docker Compose orchestration
+
+---
+
+## Phase 13: API & DB Tests ✅
+**Goal: Full coverage across all layers**
+
+- [x] `test_api_server.py` — FastAPI TestClient (20+ tests)
+- [x] `test_api_client_http.py` — HTTP client mocks (16+ tests)
+- [x] `test_database.py` — SQLAlchemy repository (14 tests)
+- [x] Error mapping tests (all domain → HTTP translations)
+- [x] ARCHITECTURE.md synced with all new layers
+
+**Learning Objectives:**
+- FastAPI TestClient patterns
+- Patching module globals for testing
+- Parameterized test cases with pytest
+
+---
+
 ## Future Enhancements (Post-Launch)
 
-These features are planned but not yet scheduled:
-
 ### Near Term
-- [ ] Price alert notifications (email/webhook)
-- [ ] Portfolio tracking (quantity × price)
-- [ ] Docker image for easy deployment
-- [ ] REST API wrapper (FastAPI) around the core service
+- [ ] Price alert notifications (email/webhook desktop)
+- [ ] Portfolio tracking (quantity × price, P&L calculation)
+- [ ] CLI favorites commands (`crypto-tracker favorites add/remove/list`)
+- [ ] Alembic migrations for schema versioning
 
 ### Medium Term
 - [ ] Multiple currency support in CLI (`--currency` already works, expand defaults)
 - [ ] JSON export alongside CSV
 - [ ] Configurable watchlist refresh interval
-- [ ] CLI favorites commands (`crypto-tracker favorites add/remove/list`)
+- [ ] User authentication for multi-user dashboard (JWT)
 
 ### Long Term
-- [ ] Database backend (SQLite/PostgreSQL) instead of JSON files
-- [ ] User authentication for multi-user dashboard
 - [ ] Advanced charting (candlestick, volume, moving averages)
 - [ ] Mobile-responsive Streamlit improvements
-- [ ] Deployment to Streamlit Cloud or similar
+- [ ] Deployment to Streamlit Cloud / Railway / Fly.io
+- [ ] Export to PDF reports
 
 ---
 
@@ -195,6 +248,8 @@ These features are planned but not yet scheduled:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.4.0 | 2026-05-05 | API + DB tests, ARCHITECTURE.md sync, full test coverage |
+| 0.3.0 | 2026-05-05 | FastAPI REST layer, PostgreSQL, Docker Compose |
 | 0.2.0 | 2026-05-05 | Dashboard: charts, favorites, CSV export, caching, resilience |
 | 0.1.0 | 2026-05-04 | CLI complete: price, list, search commands + Streamlit dashboard |
 | 0.0.1 | 2026-04-10 | Project structure + core models |

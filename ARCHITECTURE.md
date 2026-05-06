@@ -10,20 +10,25 @@
 4. [Flujo de datos](#flujo-de-datos)
 5. [Decisiones clave](#decisiones-clave)
 6. [Testing](#testing)
-7. [Dual UI: CLI + Streamlit](#dual-ui-cli--streamlit)
+7. [Triple UI: CLI + Streamlit + API](#triple-ui-cli--streamlit--api)
+8. [Docker y deployment](#docker-y-deployment)
 
 ---
 
 ## Visión general
 
-Crypto Tracker sigue una **arquitectura limpia (Clean Architecture)** con separación de responsabilidades en cuatro capas:
+Crypto Tracker sigue una **arquitectura limpia (Clean Architecture)** con separación de responsabilidades en seis zonas:
 
 | Capa | Responsabilidad | Independencia |
 |------|-----------------|---------------|
 | **CLI** | Recibir input del usuario, mostrar output | Solo conoce `core` |
+| **API (FastAPI)** | Exponer lógica como REST endpoints | Conoce `core` y `adapters/database` |
+| **Streamlit** | Dashboard web interactivo | **Consume la API vía HTTP** — no importa `core` directo |
 | **Core** | Reglas de negocio, modelos de dominio | Sin dependencias externas |
-| **Adapters** | Integrar con APIs y servicios externos | Solo implementa lo que `core` espera |
+| **Adapters** | Integrar con APIs externas y DB | Solo implementa lo que `core` espera |
 | **Config** | Leer variables de entorno y settings | Utilitario, usado por todos |
+
+La regla de oro: **el `core` no sabe de HTTP, ni de terminal, ni de web**. Es Python puro.
 
 La regla de oro: **el `core` no sabe de HTTP, ni de terminal, ni de web**. Es Python puro.
 
@@ -42,7 +47,12 @@ crypto-tracker/
 │   │   └── favorites.py       # Persistencia local de favoritos
 │   ├── adapters/
 │   │   ├── __init__.py
-│   │   └── api_client.py      # Cliente HTTP de CoinGecko
+│   │   ├── api_client.py      # Cliente HTTP de CoinGecko
+│   │   └── database.py        # Repositorio PostgreSQL via SQLAlchemy
+│   ├── api/                   # 🆕 Capa REST
+│   │   ├── __init__.py
+│   │   ├── server.py           # FastAPI — 8 endpoints + OpenAPI docs
+│   │   └── client.py           # Cliente HTTP para consumir la API
 │   ├── cli/
 │   │   ├── __init__.py
 │   │   └── commands.py        # Comandos de Click
@@ -50,12 +60,18 @@ crypto-tracker/
 │       ├── __init__.py
 │       └── settings.py        # Configuración desde env
 ├── tests/
-│   ├── test_models.py         # 23 tests — modelos de dominio
-│   ├── test_price_service.py  # 30 tests — lógica de negocio
-│   ├── test_api_client.py     # 18 tests — cliente HTTP con mocks
-│   ├── test_cli.py            # 17 tests — CLI con CliRunner
-│   └── test_favorites.py      # 16 tests — persistencia JSON
+│   ├── test_models.py              # 23 tests — modelos de dominio
+│   ├── test_price_service.py       # 30 tests — lógica de negocio
+│   ├── test_api_client.py          # 18 tests — CoinGecko HTTP mocks
+│   ├── test_cli.py                 # 17 tests — CLI con CliRunner
+│   ├── test_favorites.py           # 16 tests — persistencia JSON
+│   ├── test_database.py            # 14 tests — 🆕 SQLAlchemy + SQLite
+│   ├── test_api_server.py          # 🆕 FastAPI con TestClient
+│   └── test_api_client_http.py     # 🆕 HTTP client contra la API
 ├── app.py                     # Dashboard Streamlit
+├── run.py                     # 🆕 Launcher: arranca API + Streamlit juntos
+├── Dockerfile                 # 🆕 Imagen Docker multi-entrypoint
+├── docker-compose.yml         # 🆕 3 servicios: API + Streamlit + PostgreSQL
 ├── pyproject.toml
 └── .github/workflows/test.yml # CI con Python 3.10/3.11/3.12
 ```
@@ -160,7 +176,28 @@ def _resolve_to_id(self, query: str) -> str:
 
 #### Favorites (`favorites.py`)
 
-Persistencia simple en JSON en el home del usuario (`~/.crypto_tracker.json`). Diseño intencionalmente minimalista: no necesitamos una base de datos para una lista de símbolos.
+Persistencia de favoritos con **dos backends intercambiables**:
+
+| Backend | Clase | Cuándo se usa |
+|---------|-------|---------------|
+| **JSON file** | `FavoritesManager` | Default — sin configuración extra |
+| **PostgreSQL** | `FavoritesRepository` | Cuando `DATABASE_URL` está configurada |
+
+Ambos implementan la misma interfaz pública. El server elige uno al arrancar con **graceful degradation**: si hay `DATABASE_URL` pero la DB no responde, cae silenciosamente a JSON y loguea un warning.
+
+```python
+if settings.database_url:
+    try:
+        _favorites = FavoritesRepository(settings.database_url)
+    except Exception:
+        _favorites = FavoritesManager()  # fallback
+else:
+    _favorites = FavoritesManager()
+```
+
+#### JSON file (`FavoritesManager`)
+
+Persistencia simple en el home del usuario (`~/.crypto_tracker.json`). Intencionalmente minimalista: no necesitamos una base de datos para una lista de símbolos.
 
 ```python
 class FavoritesManager:
@@ -170,13 +207,30 @@ class FavoritesManager:
     def is_favorite(self, symbol: str) -> bool
 ```
 
+#### PostgreSQL (`FavoritesRepository`)
+
+Cuando hay `DATABASE_URL` configurada, reemplaza al JSON file. Usa SQLAlchemy 2.0 con el pattern **Repository**:
+
+```python
+class FavoritesRepository:
+    def list_all(self) -> list[FavoriteCoin]
+    def add(self, symbol: str) -> None       # idempotente (IntegrityError → silencioso)
+    def remove(self, symbol: str) -> None
+    def is_favorite(self, symbol: str) -> bool
+```
+
+La tabla `favorites` tiene dos columnas: `symbol` (PK) y `added_at` (timestamptz).
+Se crea automáticamente con `Base.metadata.create_all()` al iniciar el repositorio — no requiere migraciones manuales (aunque para producción recomendamos Alembic).
+
 ---
 
 ### 2. Adapters — Integraciones externas
 
-**Archivo:** `src/adapters/api_client.py`
+**Archivos:** `src/adapters/api_client.py`, `src/adapters/database.py`
 
-Esta es la **única** parte del código que sabe de HTTP. Si CoinGecko cambia su API, solo se modifica este archivo.
+Los adapters son la **única** parte del código que sabe de HTTP y bases de datos. Si CoinGecko cambia su API o migramos de PostgreSQL a otra DB, solo se modifican estos archivos.
+
+#### CoinGeckoClient (`api_client.py`)
 
 #### CoinGeckoClient
 
@@ -208,6 +262,24 @@ if response.status_code == 429:
 ```
 
 El CLI y el dashboard traducen esto a: *"Límite de API alcanzado. Esperá X segundos o usá una API key gratuita."*
+
+#### Database Adapter (`database.py`)
+
+Repositorio SQLAlchemy 2.0 para favoritos. Usa el pattern **Repository** para abstraer la DB del core.
+
+**Características:**
+- **Auto-creación de tablas** con `Base.metadata.create_all()` al instanciar.
+- **Idempotencia**: `add()` con `IntegrityError` se traga el error si el favorito ya existe.
+- **SQLite en testing**: los tests usan `sqlite://` (in-memory), que comparte la misma API que PostgreSQL para CRUD básico.
+- **Graceful degradation**: el server intenta PostgreSQL, y si falla, cae a JSON sin romper la app.
+
+```python
+class FavoritesRepository:
+    def __init__(self, database_url: str):
+        self._engine = create_engine(database_url, pool_pre_ping=True)
+        self._session_factory = sessionmaker(bind=self._engine)
+        Base.metadata.create_all(self._engine)  # tablas auto
+```
 
 ---
 
@@ -253,9 +325,68 @@ Usamos un dataclass `frozen=True` para que la configuración no se mute accident
 
 ---
 
+### 5. API Layer — REST endpoints
+
+**Archivos:** `src/api/server.py`, `src/api/client.py`
+
+Esta capa **no existía en el diseño original**. Se agregó para desacoplar Streamlit del core: en vez de importar `PriceService` directo, el dashboard ahora habla HTTP con FastAPI.
+
+#### Server (`server.py`)
+
+FastAPI con 8 endpoints, OpenAPI docs automáticas en `/docs`, y precarga de datos al arrancar.
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check con versión y fuente de favoritos |
+| `/api/price/{query}` | GET | Precio de una moneda |
+| `/api/prices` | GET | Precios batch (vía query string `?q=btc,eth,sol`) |
+| `/api/top` | GET | Top N por market cap |
+| `/api/history/{query}` | GET | Histórico para gráficos |
+| `/api/search/{query}` | GET | Búsqueda por nombre/símbolo |
+| `/api/favorites` | GET | Listar favoritos |
+| `/api/favorites/{symbol}` | POST | Agregar favorito |
+| `/api/favorites/{symbol}` | DELETE | Quitar favorito |
+
+**Manejo de errores:** cada excepción del dominio se mapea a un código HTTP:
+
+| Excepción | HTTP | Mensaje |
+|-----------|------|---------|
+| `CoinNotFoundError` | 404 | "Moneda no encontrada" |
+| `RateLimitError` | 429 | "Límite de API alcanzado" |
+| `NetworkError` | 502 | "Error de conexión externa" |
+| `ValidationError` | 422 | Detail con el error |
+| `APIError` | 502 | Detail del error |
+| `CryptoTrackerError` (genérico) | 500 | "Error interno" |
+
+**Precarga:** al arrancar, un thread en background precarga datos populares (top 20, precios de 10 monedas, histórico de BTC) usando su propio rate limiter para no interferir con requests de usuarios.
+
+#### Client (`client.py`)
+
+Cliente HTTP que Streamlit usa para consumir la API. Traduce respuestas HTTP y errores de red a las excepciones del dominio (`CoinNotFoundError`, `RateLimitError`, `NetworkError`).
+
+```python
+# Antes: Streamlit importaba PriceService directo
+from src.core.price_service import PriceService
+service = PriceService(api_client=client)
+data = service.get_price("btc")
+
+# Ahora: Streamlit llama a la API vía HTTP
+from src.api import client as api
+data = api.get_price("btc")  # GET → http://localhost:8000/api/price/btc
+```
+
+**¿Por qué este cambio?**
+- **Cache compartido**: la API cachea respuestas de CoinGecko y todas las sesiones de Streamlit se benefician.
+- **Rerenders más livianos**: Streamlit no carga todo el dominio, solo recibe JSON.
+- **API sirve a cualquier frontend**: React, mobile, curl — todos pueden usar los mismos endpoints.
+
+---
+
 ## Flujo de datos
 
-### Escenario: "El usuario quiere el precio de Bitcoin"
+Hay **dos caminos posibles** según la interfaz que use el usuario. Ambos terminan en el mismo `PriceService` y `CoinGeckoClient`.
+
+### Camino A — CLI (llamada directa al core)
 
 ```
 ┌─────────────┐
@@ -265,45 +396,64 @@ Usamos un dataclass `frozen=True` para que la configuración no se mute accident
        │
        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  CLI / Streamlit                                            │
-│  - Valida input (no vacío)                                  │
+│  CLI (commands.py)                                          │
+│  - Valida input                                              │
 │  - Llama a service.get_price("btc")                         │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  PriceService (core)                                        │
-│  1. Normaliza "btc" → "btc"                                 │
-│  2. Busca en SYMBOL_TO_ID → "bitcoin"                       │
-│  3. Llama a client.get_price(["bitcoin"], "usd")            │
+│  1. Normaliza "btc"                                         │
+│  2. SYMBOL_TO_ID → "bitcoin"                                │
+│  3. client.get_price(["bitcoin"], "usd")                    │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  CoinGeckoClient (adapter)                                  │
-│  1. Chequea TTL cache → ¿ya tenemos este request?           │
-│  2. Rate limiter → ¿podemos hacer la llamada?               │
-│  3. HTTP GET /simple/price                                  │
-│  4. Parsea JSON, valida, cachea, devuelve dict              │
+│  TTL cache → Rate limiter → HTTP GET → parse → cache        │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  PriceService (core, de vuelta)                             │
-│  1. Convierte dict → PriceData                              │
-│  2. Arma CoinSearchResult(coin, price_data)                 │
-│  3. Lo devuelve al CLI/Streamlit                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  CLI / Streamlit                                            │
-│  - Formatea precio, cambio, market cap                      │
-│  - Muestra al usuario con colores/gráficos                  │
+│  PriceService → CLI                                         │
+│  dict → PriceData → CoinSearchResult → formateo → pantalla  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Nota clave:** El `core` nunca ve un `requests.Response`. Solo ve dicts de Python. El `adapter` es el único que habla HTTP.
+### Camino B — Streamlit (vía API REST)
+
+```
+┌─────────────┐
+│   Usuario   │
+│  "btc"      │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Streamlit (app.py)                                         │
+│  api.get_price("btc")  →  HTTP GET                          │
+└──────────────────────────┬──────────────────────────────────┘
+                           │  GET http://localhost:8000/api/price/btc
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  FastAPI (server.py)                                        │
+│  1. Parsea params                                           │
+│  2. _service.get_price("btc")                               │
+│  3. CoinSearchResult → CoinOut (Pydantic)                   │
+│  4. JSON response                                           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  PriceService → CoinGeckoClient (mismo que Camino A)        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**¿Por qué dos caminos?** Porque Streamlit rerenderiza CONSTANTEMENTE. Si cada rerender importara todo el dominio, sería lento. La API corre separada (otro proceso o container), cachea respuestas en memoria, y sirve datos a múltiples sesiones.
+
+**Nota clave:** El `core` nunca ve un `requests.Response`. Solo ve dicts de Python. Los adapters son los únicos que hablan con el mundo exterior.
 
 ---
 
@@ -337,39 +487,83 @@ Los objetos del dominio (`Cryptocurrency`, `PriceData`) no son pickle-serializab
 
 `lru_cache` no soporta TTL ni argumentos mutables (como `list`). Nuestro `TTLCache` es simple, con eviction por antigüedad, y usa tuplas como clave.
 
+### ¿Por qué FastAPI en vez de Flask?
+
+FastAPI tiene **OpenAPI docs automáticas** (`/docs`, `/redoc`), validación con Pydantic, y type hints nativos. Para un proyecto de datos donde querés que otros puedan explorar la API fácilmente, es muy superior. Flask requiere configurar todo eso manualmente.
+
+### ¿Por qué Streamlit consume la API vía HTTP en vez de importar el core directo?
+
+Es una decisión que cambiamos a mitad del proyecto. Originalmente Streamlit importaba `PriceService` directo. El problema: cada rerender de Streamlit reinicia el script, y aunque `st.cache_resource` ayuda, el caché es por-sesión. Con la API:
+
+1. **Cache compartido**: una sola instancia de `CoinGeckoClient` sirve a todas las sesiones.
+2. **Rerenders livianos**: Streamlit solo recibe JSON, no carga todo el dominio.
+3. **La API es independiente**: puede servir a cualquier frontend (React, mobile, curl).
+
+El costo: un proceso extra que gestionar y latencia de red local (~1ms, imperceptible).
+
+### ¿Por qué PostgreSQL + JSON en vez de solo JSON?
+
+El JSON file es simple y funciona siempre. PostgreSQL se suma como opción para entornos donde:
+
+- **Múltiples usuarios** comparten la misma instalación (Docker Compose).
+- **Persistencia confiable** sin riesgo de corrupción de archivo.
+- **Operaciones concurrentes** sin race conditions.
+
+La clave: **graceful degradation**. Si configuraste DB pero no funciona, el sistema cae a JSON sin que el usuario se entere. Esto permite desarrollo local sin PostgreSQL y producción con DB.
+
+### ¿Por qué SQLAlchemy 2.0 para la DB?
+
+SQLAlchemy 2.0 con `DeclarativeBase` y `sessionmaker` es el estándar actual. Usamos SQLite in-memory para tests (misma API que PostgreSQL para CRUD), sin necesidad de mockear.
+
 ---
 
 ## Testing
 
-**Filosofía:** testear cada capa en aislamiento, con mocks para las dependencias.
+**Filosofía:** testear cada capa en aislamiento, con mocks para las dependencias. Cada adaptador/interfaz tiene su propia suite.
 
 | Suite | Archivo | Casos | Qué testea |
 |-------|---------|-------|------------|
 | Models | `test_models.py` | 23 | Creación, igualdad, formateo, timestamps |
 | Price Service | `test_price_service.py` | 30 | Lógica de negocio, resolución de símbolos, validaciones |
-| API Client | `test_api_client.py` | 18 | HTTP mocks, rate limit, errores 429/404/500, cache |
+| CoinGecko Client | `test_api_client.py` | 18 | HTTP mocks, rate limit, errores 429/404/500, cache |
 | CLI | `test_cli.py` | 17 | Click CliRunner, argumentos, opciones, errores |
-| Favorites | `test_favorites.py` | 16 | CRUD JSON, persistencia, corrupción de archivo |
+| JSON Favorites | `test_favorites.py` | 16 | CRUD JSON, persistencia, corrupción de archivo |
+| DB Repository | `test_database.py` | 14 | 🆕 SQLAlchemy con SQLite in-memory |
+| API Server | `test_api_server.py` | ~20 | 🆕 FastAPI con TestClient + mocks |
+| API HTTP Client | `test_api_client_http.py` | ~16 | 🆕 Cliente HTTP con mocks de requests |
 
-**Total: ~104 tests.**
+**Total: ~154 tests.**
 
-### Ejemplo: test de integración aislada
+### Patrones de test por capa
+
+| Capa | Cómo se testea | Herramienta |
+|------|----------------|-------------|
+| **Core** | Mock del API client | `MagicMock` + Protocol |
+| **Adapters** | Mock de `requests.Session` | `create_autospec` |
+| **CLI** | Mock del service | Click `CliRunner` |
+| **DB** | SQLite in-memory | `sqlite://` + fixtures |
+| **API Server** | Mock de service + favorites | FastAPI `TestClient` |
+| **API HTTP Client** | Mock de `requests.get/post/delete` | `unittest.mock.patch` |
+
+### Ejemplo: test del API Server con TestClient
 
 ```python
-def test_get_price_by_symbol(service: PriceService, mock_client: MagicMock):
-    mock_client.get_price.return_value = {"bitcoin": {"usd": 45000}}
-    result = service.get_price("btc")
-    assert result.coin.symbol == "btc"
-    assert result.price_data.price == 45000
+def test_get_price_by_symbol(client: TestClient, mock_service: MagicMock):
+    mock_service.get_price.return_value = _coin_search_result()
+    resp = client.get("/api/price/btc")
+    assert resp.status_code == 200
+    assert resp.json()["symbol"] == "btc"
+    assert resp.json()["price"] == 45000.50
+    mock_service.get_price.assert_called_once_with("btc", currency="usd")
 ```
 
-El `mock_client` cumple el `CoinGeckoClientProtocol` por duck typing. No necesitamos herencia ni librerías de mocking complejas.
+El `TestClient` de Starlette permite testear endpoints sin levantar un servidor HTTP. Mockeamos `_service` y `_favorites` en el módulo server, y desactivamos la precarga para los tests.
 
 ---
 
-## Dual UI: CLI + Streamlit
+## Triple UI: CLI + Streamlit + API
 
-Una decisión de diseño interesante de este proyecto es que **la misma lógica de negocio alimenta dos interfaces completamente diferentes**:
+El proyecto empezó con dos interfaces (CLI + Streamlit) compartiendo el mismo `PriceService`. Después agregamos una tercera: la **API REST**, que a su vez es consumida por el Streamlit modernizado.
 
 ```
                          ┌─────────────────┐
@@ -377,69 +571,153 @@ Una decisión de diseño interesante de este proyecto es que **la misma lógica 
                          │   (core)         │
                          └────────┬────────┘
                                   │
-              ┌───────────────────┴───────────────────┐
-              │                                       │
-              ▼                                       ▼
-    ┌─────────────────┐                     ┌─────────────────┐
-    │   CLI (Click)   │                     │  Streamlit App  │
-    │   commands.py   │                     │   app.py        │
-    │                 │                     │                 │
-    │  • Terminal     │                     │  • Web browser  │
-    │  • Texto plano  │                     │  • Plotly charts│
-    │  • Color cód.   │                     │  • CSV export   │
-    └─────────────────┘                     └─────────────────┘
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+              ▼                   ▼                   ▼
+    ┌─────────────────┐  ┌──────────────┐  ┌─────────────────┐
+    │   CLI (Click)   │  │  FastAPI     │  │  Streamlit App  │
+    │   commands.py   │  │  server.py   │  │   app.py        │
+    │                 │  │              │  │       │         │
+    │  • Terminal     │  │  • REST API  │  │  ❌ No llama   │
+    │  • Texto plano  │  │  • /docs     │  │  directo a core │
+    │  • Color cód.   │  │  • Precarga  │  │       │         │
+    └─────────────────┘  └──────┬───────┘  │  ✅ Consume API │
+                               │           │  vía HTTP       │
+                               └───────────┴─────────────────┘
 ```
 
-Ambas UIs:
-- Usan el mismo `PriceService` inyectado con el mismo `CoinGeckoClient`.
-- Manejan las mismas excepciones del dominio.
-- Comparten el `FavoritesManager` para persistencia.
+### Relaciones entre interfaces
 
-Esto demuestra el poder de la arquitectura limpia: **la interfaz es un detalle de implementación**, reemplazable sin tocar el negocio.
+| Interfaz | ¿Importa core directo? | ¿Consume API? | Ideal para |
+|----------|----------------------|---------------|------------|
+| **CLI** | ✅ Sí | ❌ No | Terminal, scripts, automatización |
+| **FastAPI** | ✅ Sí | ❌ No | Otros frontends, integraciones |
+| **Streamlit** | ❌ No | ✅ Sí | Usuarios finales, dashboards |
+
+### ¿Por qué Streamlit no importa core directo?
+
+Originalmente sí lo hacía. Pero Streamlit rerenderiza CONSTANTEMENTE (cada click, cada input). Si cada rerender importara todo el dominio — `PriceService`, `CoinGeckoClient`, models, excepciones, etc. — la experiencia se degradaba. La API resuelve esto:
+
+1. **Cache compartido**: una sola instancia de `CoinGeckoClient` en la API sirve a todas las sesiones de Streamlit.
+2. **Rerenders livianos**: Streamlit solo recibe JSON, no carga módulos de Python.
+3. **La API es independiente**: puede servir a cualquier frontend (React, mobile, curl).
+
+Este es un buen ejemplo de cómo la arquitectura limpia permite evolucionar: el core no cambió, solo reorganizamos cómo las interfaces se conectan a él.
 
 ---
 
 ## Diagrama de dependencias
 
 ```
-                    ┌─────────────┐
-                    │   Config    │
-                    │  settings   │
-                    └──────┬──────┘
-                           │
-           ┌───────────────┼───────────────┐
-           │               │               │
-           ▼               ▼               ▼
-    ┌────────────┐  ┌────────────┐  ┌────────────┐
-    │    CLI     │  │ Streamlit  │  │   Tests    │
-    │  commands  │  │   app.py   │  │   mocks    │
-    └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
-          │               │               │
-          └───────────────┼───────────────┘
-                          │
-                          ▼
-                   ┌────────────┐
-                   │    Core    │
-                   │  service   │
-                   │  models    │
-                   │ favorites  │
-                   └─────┬──────┘
-                         │
-                         ▼
-                   ┌────────────┐
-                   │  Adapters  │
-                   │ api_client │
-                   │  (HTTP)    │
-                   └─────┬──────┘
-                         │
-                         ▼
-                   ┌────────────┐
-                   │  External  │
-                   │ CoinGecko  │
-                   └────────────┘
+                    ┌─────────────────────┐
+                    │      Config         │
+                    │     settings        │
+                    └──────────┬──────────┘
+                               │
+           ┌───────────────────┼───────────────────────┐
+           │                   │                       │
+           ▼                   ▼                       ▼
+    ┌────────────┐    ┌──────────────┐        ┌────────────┐
+    │    CLI     │    │   FastAPI    │        │   Tests    │
+    │  commands  │    │  server.py   │        │   mocks    │
+    └─────┬──────┘    └──────┬───────┘        └─────┬──────┘
+          │                  │                       │
+          │                  ▼                       │
+          │           ┌──────────────┐               │
+          │           │  Streamlit   │               │
+          │           │   app.py     │               │
+          │           │  (via HTTP)  │               │
+          │           └──────┬───────┘               │
+          │                  │                       │
+          └──────────────────┼───────────────────────┘
+                             │
+                             ▼
+                      ┌────────────┐
+                      │    Core    │
+                      │  service   │
+                      │  models    │
+                      │ favorites  │
+                      └─────┬──────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+              ▼             ▼             ▼
+    ┌────────────┐  ┌──────────────┐  ┌──────────────┐
+    │ CoinGecko  │  │  Database   │  │   JSON File  │
+    │  Client    │  │ Repository  │  │ Favorites    │
+    │  (HTTP)    │  │ (PostgreSQL)│  │ (fallback)   │
+    └─────┬──────┘  └──────────────┘  └──────────────┘
+          │
+          ▼
+    ┌────────────┐
+    │  External  │
+    │ CoinGecko  │
+    └────────────┘
 ```
 
-**Regla visual:** las flechas apuntan hacia abajo. Ninguna flecha apunta hacia arriba. El `core` no conoce al CLI, ni al Streamlit, ni a los tests.
+**Regla visual:** las flechas apuntan hacia abajo. Ninguna flecha apunta hacia arriba. El `core` no conoce a ninguna interfaz, solo define contratos (Protocol) que los adapters implementan.
+
+---
+
+## Docker y deployment
+
+El proyecto incluye Docker multi-etapa para levantar todo el stack:
+
+### Docker Compose (3 servicios)
+
+```yaml
+services:
+  db:            # PostgreSQL 16 Alpine — datos persistentes
+  api:           # FastAPI — depende de db (healthcheck)
+  streamlit:     # Dashboard — depende de api (healthcheck)
+```
+
+**Flujo de arranque:**
+1. PostgreSQL levanta y pasa su healthcheck (`pg_isready`).
+2. FastAPI arranca, conecta a la DB, y expone el health endpoint.
+3. Streamlit arranca y apunta a `http://api:8000` (DNS interno de Docker).
+
+**Variables de entorno:**
+| Variable | Dónde se usa | Default |
+|----------|-------------|---------|
+| `COINGECKO_API_KEY` | API + precarga | (vacío — free tier) |
+| `DATABASE_URL` | API → FavoritesRepository | (vacío — usa JSON) |
+| `API_BASE_URL` | Streamlit → api client | `http://api:8000` |
+
+### Dockerfile
+
+Una sola imagen con dos entrypoints:
+
+```dockerfile
+# Default: API
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0"]
+
+# Override: Streamlit
+# docker run crypto-tracker streamlit run app.py
+```
+
+### Makefile
+
+Comandos útiles para el día a día:
+
+```bash
+make docker-build    # build imagen
+make docker-up       # docker compose up -d
+make docker-logs     # logs en vivo
+make docker-rebuild  # rebuild + restart
+make docker-down     # stop todo
+```
+
+### Launcher local (`run.py`)
+
+Para desarrollo sin Docker:
+
+```bash
+python run.py
+# Arranca FastAPI + Streamlit como subprocessos
+# Hace polling al health endpoint hasta que la API responda
+# Cleanup automático con atexit
+```
 
 ---
 

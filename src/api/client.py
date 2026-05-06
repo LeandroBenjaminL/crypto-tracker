@@ -61,7 +61,9 @@ def get_price(query: str, currency: str = "usd") -> dict[str, Any]:
     """Precio de una moneda."""
     try:
         resp = requests.get(f"{_API_BASE}/api/price/{query}", params={"currency": currency})
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
+        raise NetworkError()
+    except requests.Timeout:
         raise NetworkError()
     return _handle_response(resp)
 
@@ -71,7 +73,9 @@ def get_prices(queries: list[str], currency: str = "usd") -> list[dict[str, Any]
     q = ",".join(queries)
     try:
         resp = requests.get(f"{_API_BASE}/api/prices", params={"q": q, "currency": currency})
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
+        raise NetworkError()
+    except requests.Timeout:
         raise NetworkError()
     return _handle_response(resp)
 
@@ -80,7 +84,7 @@ def get_top(limit: int = 10, currency: str = "usd") -> list[dict[str, Any]]:
     """Top N monedas por market cap."""
     try:
         resp = requests.get(f"{_API_BASE}/api/top", params={"limit": limit, "currency": currency})
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
 
@@ -92,7 +96,7 @@ def get_history(query: str, days: int = 7, currency: str = "usd") -> list[dict[s
             f"{_API_BASE}/api/history/{query}",
             params={"days": days, "currency": currency},
         )
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
 
@@ -106,7 +110,7 @@ def search(query: str) -> list[dict[str, Any]]:
     """Buscar monedas por nombre o símbolo."""
     try:
         resp = requests.get(f"{_API_BASE}/api/search/{query}")
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
 
@@ -120,7 +124,7 @@ def list_favorites() -> list[dict[str, Any]]:
     """Listar favoritos."""
     try:
         resp = requests.get(f"{_API_BASE}/api/favorites")
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
 
@@ -129,7 +133,7 @@ def add_favorite(symbol: str) -> dict[str, Any]:
     """Agregar favorito."""
     try:
         resp = requests.post(f"{_API_BASE}/api/favorites/{symbol}")
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
 
@@ -138,7 +142,7 @@ def remove_favorite(symbol: str) -> None:
     """Quitar favorito."""
     try:
         resp = requests.delete(f"{_API_BASE}/api/favorites/{symbol}")
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     if not resp.ok:
         _handle_response(resp)
@@ -155,5 +159,5 @@ def health() -> dict[str, Any]:
         resp = requests.get(f"{_API_BASE}/api/health")
         resp.raise_for_status()
         return resp.json()
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         return {"status": "down", "api_key_configured": False, "version": "?"}

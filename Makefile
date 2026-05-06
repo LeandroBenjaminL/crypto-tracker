@@ -1,4 +1,4 @@
-.PHONY: install test lint fmt typecheck coverage pre-commit clean
+.PHONY: install test lint fmt typecheck coverage pre-commit clean db-migrate db-revision db-upgrade db-downgrade
 
 # Install the package with all dev dependencies
 install:
@@ -53,3 +53,28 @@ clean:
 	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' -o -name '.ruff_cache' \) -exec rm -rf {} + 2>/dev/null || true
 	@rm -f .coverage
 	@rm -rf htmlcov
+
+# ──────────────────────────────────────────────────────────
+# Database migrations (Alembic)
+# ──────────────────────────────────────────────────────────
+
+# Up: DATABASE_URL=sqlite:///crypto_tracker.db alembic upgrade head
+db-upgrade:
+	alembic upgrade head
+
+# Down one step
+db-downgrade:
+	alembic downgrade -1
+
+# Show current version and history
+db-history:
+	alembic history
+
+# Autogenerate a new migration (after model changes)
+# Usage: make db-revision msg="add email column to users"
+db-revision:
+	alembic revision --autogenerate -m "$(msg)"
+
+# Run initial migration (create all tables)
+db-init:
+	alembic upgrade head

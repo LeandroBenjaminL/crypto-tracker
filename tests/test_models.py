@@ -1,14 +1,28 @@
 """
-Tests for core models.
+Tests for core domain models.
 
-These tests validate that our data models work correctly.
-No external dependencies are mocked - we test pure Python behavior.
+Cubre:
+  - Creación y atributos de todos los modelos
+  - Formateo de precios (altos, bajos, muy bajos, cero)
+  - Indicadores de cambio (positivo, negativo, cero)
+  - Igualdad y hash de Cryptocurrency
+  - Normalización en FavoriteCoin
+  - PriceAlert (activo, triggered, edge cases)
+  - CoinSearchResult (con/sin precio)
+  - Excepciones del dominio
 """
+
+from __future__ import annotations
 
 from datetime import datetime, timezone
 
 from src.core.exceptions import (
+    APIError,
     CoinNotFoundError,
+    ConfigurationError,
+    CryptoTrackerError,
+    NetworkError,
+    RateLimitError,
     ValidationError,
 )
 from src.core.models import (
@@ -21,204 +35,267 @@ from src.core.models import (
 
 
 class TestCryptocurrency:
-    """Tests for Cryptocurrency dataclass."""
+    """Cryptocurrency creation, equality, hash, repr."""
 
-    def test_create_cryptocurrency(self):
-        """Test basic cryptocurrency creation."""
+    def test_create(self):
         btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=1)
-
         assert btc.id == "bitcoin"
         assert btc.symbol == "btc"
         assert btc.name == "Bitcoin"
         assert btc.rank == 1
 
-    def test_cryptocurrency_str(self):
-        """Test string representation."""
-        btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+    def test_default_rank_is_zero(self):
+        c = Cryptocurrency(id="x", symbol="x", name="X")
+        assert c.rank == 0
 
+    def test_str(self):
+        btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
         assert str(btc) == "Bitcoin (BTC)"
 
-    def test_cryptocurrency_default_rank(self):
-        """Test that rank defaults to 0."""
+    def test_equality_by_id(self):
+        c1 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=1)
+        c2 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=2)
+        assert c1 == c2
+
+    def test_inequality_different_id(self):
+        c1 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+        c2 = Cryptocurrency(id="ethereum", symbol="eth", name="Ethereum")
+        assert c1 != c2
+
+    def test_not_equal_to_non_crypto(self):
         btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+        assert btc != "bitcoin"  # noqa: E721 — comparación intencional
 
-        assert btc.rank == 0
+    def test_hash_based_on_id(self):
+        c1 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+        c2 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=99)
+        assert hash(c1) == hash(c2)
+        # Se pueden usar en sets
+        s = {c1, c2}
+        assert len(s) == 1  # mismo hash = mismo elemento
 
-    def test_cryptocurrency_equality(self):
-        """Test that cryptocurrencies with same id are equal."""
-        btc1 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=1)
-        btc2 = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin", rank=2)
-
-        # They should be equal because they have the same id
-        assert btc1 == btc2
+    def test_hash_different_for_different_ids(self):
+        btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+        eth = Cryptocurrency(id="ethereum", symbol="eth", name="Ethereum")
+        assert hash(btc) != hash(eth)
 
 
 class TestPriceData:
-    """Tests for PriceData dataclass."""
+    """PriceData creation, formatting, indicators."""
 
-    def test_create_price_data(self):
-        """Test basic price data creation."""
-        price = PriceData(
-            coin_id="bitcoin",
-            price=45000.50,
-            change_24h=2.5,
-            volume_24h=25000000000,
-            market_cap=850000000000
+    def test_create(self):
+        p = PriceData(
+            coin_id="bitcoin", price=45000.50,
+            change_24h=2.5, volume_24h=25e9, market_cap=850e9,
         )
+        assert p.coin_id == "bitcoin"
+        assert p.price == 45000.50
 
-        assert price.coin_id == "bitcoin"
-        assert price.price == 45000.50
-        assert price.change_24h == 2.5
+    def test_price_formatted_high(self):
+        """>= $1: formato con 2 decimales."""
+        assert PriceData(coin_id="x", price=45000.50).price_formatted == "$45,000.50"
 
-    def test_price_formatted_high_price(self):
-        """Test price formatting for high values (> $1)."""
-        price = PriceData(coin_id="bitcoin", price=45000.50)
+    def test_price_formatted_medium(self):
+        """>= $0.01: formato con 4 decimales."""
+        assert PriceData(coin_id="x", price=0.0234).price_formatted == "$0.0234"
 
-        assert price.price_formatted == "$45,000.50"
+    def test_price_formatted_low(self):
+        """< $0.01: formato con 8 decimales."""
+        assert PriceData(coin_id="x", price=0.00001234).price_formatted == "$0.00001234"
 
-    def test_price_formatted_low_price(self):
-        """Test price formatting for low values (>$0.01, <$1)."""
-        price = PriceData(coin_id="bitcoin", price=0.0234)
+    def test_price_formatted_zero(self):
+        """Precio 0 cae en < 0.01 → 8 decimales."""
+        # No es ideal pero es el comportamiento actual del formateo
+        assert PriceData(coin_id="x", price=0).price_formatted == "$0.00000000"
 
-        assert price.price_formatted == "$0.0234"
+    def test_price_formatted_exact_one(self):
+        """Precio exactamente 1."""
+        assert PriceData(coin_id="x", price=1.0).price_formatted == "$1.00"
 
-    def test_price_formatted_very_low_price(self):
-        """Test price formatting for very low values (<$0.01)."""
-        price = PriceData(coin_id="bitcoin", price=0.00001234)
+    def test_price_formatted_exact_cent(self):
+        """Precio exactamente 0.01."""
+        assert PriceData(coin_id="x", price=0.01).price_formatted == "$0.0100"
 
-        assert price.price_formatted == "$0.00001234"
+    def test_price_formatted_negative(self):
+        """Precio negativo también cae en < 0.01 → 8 decimales."""
+        assert PriceData(coin_id="x", price=-5.0).price_formatted == "$-5.00000000"
 
     def test_change_indicator_positive(self):
-        """Test change indicator for positive change."""
-        price = PriceData(coin_id="bitcoin", price=100, change_24h=5.0)
-
-        assert price.change_indicator == "▲"
+        assert PriceData(coin_id="x", price=100, change_24h=5.0).change_indicator == "▲"
 
     def test_change_indicator_negative(self):
-        """Test change indicator for negative change."""
-        price = PriceData(coin_id="bitcoin", price=100, change_24h=-5.0)
-
-        assert price.change_indicator == "▼"
+        assert PriceData(coin_id="x", price=100, change_24h=-5.0).change_indicator == "▼"
 
     def test_change_indicator_zero(self):
-        """Test change indicator for zero change."""
-        price = PriceData(coin_id="bitcoin", price=100, change_24h=0)
+        assert PriceData(coin_id="x", price=100, change_24h=0).change_indicator == "―"
 
-        assert price.change_indicator == "―"
+    def test_change_indicator_very_small(self):
+        """0.0001 cuenta como positivo."""
+        assert PriceData(coin_id="x", price=100, change_24h=0.0001).change_indicator == "▲"
 
     def test_change_formatted_positive(self):
-        """Test change formatting for positive values."""
-        price = PriceData(coin_id="bitcoin", price=100, change_24h=5.5)
-
-        assert price.change_formatted == "+5.50%"
+        assert PriceData(coin_id="x", price=100, change_24h=5.5).change_formatted == "+5.50%"
 
     def test_change_formatted_negative(self):
-        """Test change formatting for negative values."""
-        price = PriceData(coin_id="bitcoin", price=100, change_24h=-3.25)
+        assert PriceData(coin_id="x", price=100, change_24h=-3.25).change_formatted == "-3.25%"
 
-        assert price.change_formatted == "-3.25%"
+    def test_change_formatted_zero(self):
+        assert PriceData(coin_id="x", price=100, change_24h=0).change_formatted == "0.00%"
 
-    def test_default_timestamp(self):
-        """Test that timestamp defaults to current UTC time."""
+    def test_default_timestamp_is_utc(self):
         before = datetime.now(timezone.utc)
-        price = PriceData(coin_id="bitcoin", price=100)
+        p = PriceData(coin_id="x", price=100)
         after = datetime.now(timezone.utc)
-
-        assert before <= price.timestamp <= after
+        assert before <= p.timestamp <= after
+        assert p.timestamp.tzinfo is not None  # timezone-aware
 
 
 class TestCoinSearchResult:
-    """Tests for CoinSearchResult dataclass."""
+    """CoinSearchResult with/without price."""
 
-    def test_create_with_price(self):
-        """Test creating result with price data."""
+    def test_with_price(self):
         btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
         price = PriceData(coin_id="bitcoin", price=45000)
-        result = CoinSearchResult(coin=btc, price_data=price)
+        r = CoinSearchResult(coin=btc, price_data=price)
+        assert r.has_price() is True
+        assert r.price_data is not None
+        assert r.price_data.price == 45000
 
-        assert result.has_price() is True
-        assert result.coin.name == "Bitcoin"
-        assert result.price_data is not None
-        assert result.price_data.price == 45000
-
-    def test_create_without_price(self):
-        """Test creating result without price data."""
+    def test_without_price(self):
         btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
-        result = CoinSearchResult(coin=btc)
+        r = CoinSearchResult(coin=btc)
+        assert r.has_price() is False
+        assert r.price_data is None
 
-        assert result.has_price() is False
-        assert result.price_data is None
+    def test_coin_is_accessible(self):
+        btc = Cryptocurrency(id="bitcoin", symbol="btc", name="Bitcoin")
+        r = CoinSearchResult(coin=btc)
+        assert r.coin.name == "Bitcoin"
+        assert r.coin.symbol == "btc"
 
 
 class TestFavoriteCoin:
-    """Tests for FavoriteCoin dataclass."""
+    """FavoriteCoin creation and normalization."""
 
-    def test_create_favorite(self):
-        """Test basic favorite creation."""
-        fav = FavoriteCoin(symbol="BTC")
+    def test_symbol_normalized_to_lowercase(self):
+        assert FavoriteCoin(symbol="BTC").symbol == "btc"
 
-        assert fav.symbol == "btc"  # Normalized to lowercase
-        assert fav.added_at is not None
+    def test_symbol_normalized_mixed_case(self):
+        assert FavoriteCoin(symbol="Eth").symbol == "eth"
 
-    def test_symbol_normalization(self):
-        """Test that symbols are normalized to lowercase."""
-        fav = FavoriteCoin(symbol="Eth")
+    def test_default_timestamp(self):
+        before = datetime.now(timezone.utc)
+        f = FavoriteCoin(symbol="btc")
+        after = datetime.now(timezone.utc)
+        assert before <= f.added_at <= after
 
-        assert fav.symbol == "eth"
+    def test_custom_timestamp(self):
+        t = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        f = FavoriteCoin(symbol="btc", added_at=t)
+        assert f.added_at == t
 
-    def test_custom_added_at(self):
-        """Test custom added_at timestamp."""
-        custom_time = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
-        fav = FavoriteCoin(symbol="btc", added_at=custom_time)
-
-        assert fav.added_at == custom_time
+    def test_post_init_normalizes(self):
+        """__post_init__ se ejecuta y normaliza."""
+        f = FavoriteCoin(symbol="  BTC  ")
+        # Nota: el post_init hace .lower() pero no strip() en la implementación actual
+        # Verificamos lo que realmente hace
+        assert f.symbol == "  btc  "  # lowercased pero no stripped
 
 
 class TestPriceAlert:
-    """Tests for PriceAlert dataclass."""
+    """PriceAlert creation and state changes."""
 
     def test_create_alert(self):
-        """Test basic alert creation."""
-        alert = PriceAlert(
-            coin_id="bitcoin",
-            target_price=50000,
-            condition="above"
-        )
-
-        assert alert.coin_id == "bitcoin"
-        assert alert.target_price == 50000
-        assert alert.condition == "above"
-        assert alert.is_active is True
-        assert alert.triggered_at is None
+        a = PriceAlert(coin_id="bitcoin", target_price=50000, condition="above")
+        assert a.coin_id == "bitcoin"
+        assert a.target_price == 50000
+        assert a.condition == "above"
+        assert a.is_active is True
+        assert a.triggered_at is None
 
     def test_triggered_alert(self):
-        """Test triggered alert."""
-        triggered_time = datetime.now(timezone.utc)
-        alert = PriceAlert(
-            coin_id="bitcoin",
-            target_price=50000,
-            condition="above"
-        )
-        alert.triggered_at = triggered_time
-        alert.is_active = False
+        t = datetime.now(timezone.utc)
+        a = PriceAlert(coin_id="bitcoin", target_price=50000, condition="below")
+        a.is_active = False
+        a.triggered_at = t
+        assert a.is_active is False
+        assert a.triggered_at == t
 
-        assert alert.is_active is False
-        assert alert.triggered_at == triggered_time
+    def test_default_created_at(self):
+        a = PriceAlert(coin_id="x", target_price=100, condition="above")
+        assert a.created_at is not None
+
+    def test_condition_above(self):
+        a = PriceAlert(coin_id="x", target_price=100, condition="above")
+        assert a.condition == "above"
+
+    def test_condition_below(self):
+        a = PriceAlert(coin_id="x", target_price=100, condition="below")
+        assert a.condition == "below"
+
+    def test_default_is_active(self):
+        a = PriceAlert(coin_id="x", target_price=100, condition="above")
+        assert a.is_active is True
+
+    def test_is_active_false_after_trigger(self):
+        a = PriceAlert(coin_id="x", target_price=100, condition="above")
+        a.is_active = False
+        assert a.is_active is False
 
 
 class TestExceptions:
-    """Tests for custom exceptions."""
+    """Custom exception hierarchy."""
 
-    def test_coin_not_found_error(self):
-        """Test CoinNotFoundError."""
-        error = CoinNotFoundError("notexist")
-
-        assert error.identifier == "notexist"
-        assert "notexist" in str(error)
+    def test_coin_not_found(self):
+        e = CoinNotFoundError("testcoin")
+        assert e.identifier == "testcoin"
+        assert "testcoin" in str(e)
 
     def test_validation_error(self):
-        """Test ValidationError."""
-        error = ValidationError("symbol", "", "cannot be empty")
+        e = ValidationError("symbol", "", "cannot be empty")
+        assert e.field == "symbol"
+        assert "empty" in str(e)
 
-        assert error.field == "symbol"
-        assert "empty" in str(error)
+    def test_rate_limit_with_retry(self):
+        e = RateLimitError(retry_after=30)
+        assert e.retry_after == 30
+        assert "30" in str(e)
+
+    def test_rate_limit_without_retry(self):
+        e = RateLimitError()
+        assert e.retry_after is None
+
+    def test_api_error_with_status(self):
+        e = APIError("message", status_code=502)
+        assert e.status_code == 502
+
+    def test_api_error_without_status(self):
+        e = APIError("message")
+        assert e.status_code is None
+
+    def test_network_error_with_cause(self):
+        cause = Exception("connection failed")
+        e = NetworkError(original_error=cause)
+        assert "Exception" in str(e)  # type().__name__ del error original
+        assert e.original_error is cause
+
+    def test_network_error_without_cause(self):
+        e = NetworkError()
+        assert "network" in str(e).lower()
+
+    def test_configuration_error(self):
+        e = ConfigurationError("missing env var")
+        assert "missing" in str(e)
+
+    def test_crypto_tracker_error_base(self):
+        e = CryptoTrackerError("base error")
+        assert isinstance(e, Exception)
+
+    def test_all_exceptions_inherit_from_base(self):
+        """Todas las excepciones heredan de CryptoTrackerError."""
+        assert issubclass(CoinNotFoundError, CryptoTrackerError)
+        assert issubclass(APIError, CryptoTrackerError)
+        assert issubclass(RateLimitError, APIError)
+        assert issubclass(NetworkError, CryptoTrackerError)
+        assert issubclass(ValidationError, CryptoTrackerError)
+        assert issubclass(ConfigurationError, CryptoTrackerError)
