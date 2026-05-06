@@ -292,8 +292,9 @@ def pipeline(top: int) -> None:
     """
     Ejecuta el pipeline ETL: CoinGecko → PostgreSQL.
 
-    Extrae las top N criptos, las transforma y las guarda
-    en la tabla price_snapshots para que la API responda rápido.
+    Extrae las top N criptos y guarda snapshots de precios.
+    Si pasaron más de 6h desde la última vez, también actualiza
+    el histórico de precios (7d, 30d, 90d) para las top 20 monedas.
     """
     from src.core.pipeline import PipelineError, run as run_pipeline
 
@@ -311,9 +312,15 @@ def pipeline(top: int) -> None:
         return
 
     try:
-        inserted = run_pipeline(top_n=top)
+        stats = run_pipeline(top_n=top)
+        snapshots = stats.get("snapshots", 0)
+        history = stats.get("history_updated", 0)
         click.echo(
-            click.style(f"\n✅ Pipeline completado: {inserted} snapshots", fg="green")
+            click.style(
+                f"\n✅ Pipeline completado: {snapshots} snapshots, "
+                f"{history} históricos actualizados",
+                fg="green",
+            )
         )
     except PipelineError as e:
         click.echo(click.style(f"\n[X] Error en pipeline: {e}", fg="red"))

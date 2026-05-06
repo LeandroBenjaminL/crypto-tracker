@@ -40,8 +40,10 @@ from src.core.models import (
 from src.core.price_service import PriceService
 from src.core.pipeline import (
     PriceSnapshotRow,
+    get_history_from_db,
     get_latest_snapshot,
     get_latest_snapshots,
+    get_top_from_db,
 )
 
 _logger = logging.getLogger("crypto-tracker.api")
@@ -123,64 +125,55 @@ _service = PriceService(api_client=_client)
 _VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
-# Precargar datos populares al arrancar
+# Precargar datos populares al arrancar (mínimo — el pipeline hace el resto)
 # ---------------------------------------------------------------------------
 
-_POPULAR_COINS = ["btc", "eth", "sol", "xrp", "ada", "doge", "dot", "avax", "link", "matic"]
-_POPULAR_DAYS = [7, 30, 90]
+_POPULAR_COINS = ["btc", "eth", "sol", "xrp", "ada"]
 
 
 def _precache() -> None:
     """
-    Precarga datos populares en background con SU PROPIO rate limiter.
-    No interfiere con las requests del usuario — usa un cliente aparte.
-    Si no hay rate limit disponible, saltea y espera.
+    Precarga mínima al arrancar.
+
+    El pipeline se encarga de mantener los datos frescos.
+    Esto es solo para que la primera request no se encuentre
+    con la DB vacía si el pipeline aún no corrió.
     """
     import time
 
     from src.adapters.api_client import CoinGeckoClient, RateLimiter
     from src.core.price_service import PriceService
 
-    # Cliente exclusivo para precarga — no bloquea al principal
     precache_client = CoinGeckoClient(
         api_key=settings.coingecko_api_key,
         cache_ttl=30.0,
         rate_limiter=RateLimiter(
-            max_calls=2,        # solo 2 calls por ventana para dejar lugar al usuario
+            max_calls=2,
             window_seconds=60.0,
-            max_wait=30.0,      # espera hasta 30s si no hay cupo
+            max_wait=30.0,
         ),
     )
     precache_service = PriceService(api_client=precache_client)
 
-    _logger.info("Precargando datos populares (background)...")
+    _logger.info("Precarga ligera (background)...")
 
-    # 1. Top 20 — llena cache de list_top
+    # Solo las top 10 para no quemar rate limit
     try:
-        precache_service.list_top(limit=20)
-        _logger.info("  ✓ Top 20 listo")
-    except Exception as e:
-        _logger.warning(f"  Top 20: {e}")
+        precache_service.list_top(limit=10)
+        _logger.info("  ✓ Top 10")
+    except Exception:
+        pass
 
-    # 2. Precios de monedas populares
-    for symbol in _POPULAR_COINS:
+    # Solo BTC y ETH para calentar
+    for symbol in ["btc", "eth"]:
         try:
             precache_service.get_price(symbol)
-            _logger.info(f"  ✓ {symbol}")
-        except Exception:
-            pass  # si rate limit, lo intenta después
-        time.sleep(1)
-
-    # 3. Histórico de BTC para períodos comunes
-    for days in _POPULAR_DAYS:
-        try:
-            precache_service.get_history("bitcoin", days=days)
-            _logger.info(f"  ✓ BTC {days}d")
+            _logger.info("  ✓ %s", symbol)
         except Exception:
             pass
-        time.sleep(1)
+        time.sleep(0.5)
 
-    _logger.info("Precarga completa.")
+    _logger.info("Precarga lista.")
 
 
 @asynccontextmanager
@@ -416,9 +409,24 @@ def get_prices(q: str = "btc,eth", currency: str = "usd") -> list[CoinOut]:
     "/api/top",
     response_model=list[CoinOut],
     summary="Top monedas por market cap",
+    description="Las N monedas con mayor capitalización."
+    " Si el pipeline cargó datos, responde desde PostgreSQL (ms)."
+    " Si no, consulta CoinGecko.",
 )
 def get_top(limit: int = 10, currency: str = "usd") -> list[CoinOut]:
-    """Las N monedas con mayor capitalización de mercado."""
+    """
+    Las N monedas con mayor capitalización de mercado.
+
+    Estrategia:
+      1. Leer desde price_snapshots (datos del pipeline)
+      2. Si no hay, llamar a CoinGecko
+    """
+    # Intento 1: DB
+    db_rows = get_top_from_db(limit=limit)
+    if db_rows:
+        return [_snapshot_to_coin_out(r) for r in db_rows]
+
+    # Intento 2: CoinGecko (fallback)
     results = _service.list_top(limit=limit, currency=currency)
     return [_coin_to_out(r) for r in results]
 
@@ -427,12 +435,30 @@ def get_top(limit: int = 10, currency: str = "usd") -> list[CoinOut]:
     "/api/history/{query}",
     response_model=list[HistoryPoint],
     summary="Precio histórico",
-    description="Datos para graficar. Params: days (1,7,30,90,365,'max').",
+    description="Datos para graficar. Params: days (1,7,30,90,365,'max')."
+    " Si el pipeline cacheó los datos, responde desde PostgreSQL.",
 )
 def get_history(
     query: str, days: int = 7, currency: str = "usd"
 ) -> list[dict[str, float]]:
-    """Historial de precios para una moneda."""
+    """
+    Historial de precios para una moneda.
+
+    Estrategia:
+      1. Buscar en price_history
+      2. Si no hay, llamar a CoinGecko
+    """
+    from src.core.price_service import SYMBOL_TO_ID
+
+    # Resolver símbolo a coin_id
+    coin_id = SYMBOL_TO_ID.get(query.strip().lower(), query.strip().lower())
+
+    # Intento 1: DB
+    cached = get_history_from_db(coin_id, days=days)
+    if cached is not None:
+        return cached
+
+    # Intento 2: CoinGecko (fallback)
     return _service.get_history(query, days=days, currency=currency)
 
 

@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -66,6 +66,27 @@ class PriceSnapshotRow(Base):
     market_cap: float = Column(Float, nullable=True)
     rank: int = Column(Integer, nullable=True)
     snapshot_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class PriceHistoryRow(Base):
+    """
+    Historial de precios cacheado en DB.
+
+    Guarda el resultado de /api/history para cada moneda y período
+    (7, 30, 90, 365 días). El pipeline refresca esto cada 6 horas.
+    La API lo sirve sin tocar CoinGecko.
+    """
+
+    __tablename__ = "price_history"
+
+    coin_id: str = Column(String(100), primary_key=True)
+    days: int = Column(Integer, primary_key=True)  # 7, 30, 90, 365
+    data: str = Column(Text, nullable=False)  # JSON: [{"timestamp": ..., "price": ...}]
+    updated_at: datetime = Column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
