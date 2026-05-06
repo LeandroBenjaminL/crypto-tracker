@@ -41,28 +41,93 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* ═══════════════════════════════════════════════
+       VARIABLES DE TEMA — dark (default) y light
+       ═══════════════════════════════════════════════ */
+    :root {
+        --bg-primary: #0a0e1a;
+        --bg-secondary: #0f1525;
+        --bg-card: rgba(26, 26, 46, 0.7);
+        --bg-card-hover: rgba(30, 30, 54, 0.8);
+        --border-card: rgba(255, 255, 255, 0.06);
+        --border-divider: rgba(255, 255, 255, 0.06);
+        --text-primary: #f0f0f0;
+        --text-secondary: #aaa;
+        --text-muted: rgba(255, 255, 255, 0.4);
+        --text-label: #aaa;
+        --color-green: #00d4aa;
+        --color-red: #ff6b6b;
+        --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
+        --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
+        --shadow-button: 0 4px 12px rgba(0, 0, 0, 0.3);
+        --bg-table: #1a1a2e;
+        --bg-table-header: #16213e;
+        --bg-table-border: #2a2a4a;
+        --bg-table-hover: #1e2a4a;
+        --bg-table-text: #f0f0f0;
+        --bg-table-header-text: #e0e0e0;
+        --bg-sidebar: linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%);
+        --bg-nav-hover: rgba(255, 255, 255, 0.05);
+        --bg-nav-active: rgba(0, 212, 170, 0.1);
+        --border-nav-active: rgba(0, 212, 170, 0.2);
+        --grid-color: #2a2a4a;
+    }
+
+    [data-theme="light"] {
+        --bg-primary: #f5f7fa;
+        --bg-secondary: #ffffff;
+        --bg-card: rgba(255, 255, 255, 0.9);
+        --bg-card-hover: rgba(255, 255, 255, 0.95);
+        --border-card: rgba(0, 0, 0, 0.08);
+        --border-divider: rgba(0, 0, 0, 0.08);
+        --text-primary: #1a1a2e;
+        --text-secondary: #666;
+        --text-muted: rgba(0, 0, 0, 0.4);
+        --text-label: #666;
+        --color-green: #00a676;
+        --color-red: #e53e3e;
+        --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
+        --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+        --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.1);
+        --bg-table: #ffffff;
+        --bg-table-header: #f0f2f5;
+        --bg-table-border: #e2e8f0;
+        --bg-table-hover: #f7fafc;
+        --bg-table-text: #1a1a2e;
+        --bg-table-header-text: #4a5568;
+        --bg-sidebar: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+        --bg-nav-hover: rgba(0, 0, 0, 0.04);
+        --bg-nav-active: rgba(0, 166, 118, 0.08);
+        --border-nav-active: rgba(0, 166, 118, 0.2);
+        --grid-color: #e2e8f0;
+    }
+
+    /* ═══════════════════════════════════════════════
+       ESTILOS GENERALES
+       ═══════════════════════════════════════════════ */
+
     /* Fondo general — degradé sutil */
     .stApp {
-        background: linear-gradient(160deg, #0a0e1a 0%, #0f1525 50%, #0a0e1a 100%);
+        background: linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
     }
     .main > div { padding: 0 1rem; }
 
     /* Tarjetas con efecto glassmorphism */
     div[data-testid="stMetric"],
     .element-container:has(.card) {
-        background: rgba(26, 26, 46, 0.7);
+        background: var(--bg-card);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border-card);
+        box-shadow: var(--shadow-card);
         padding: 0.5rem;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     div[data-testid="stMetric"]:hover,
     .element-container:has(.card):hover {
         transform: translateY(-2px);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        box-shadow: var(--shadow-card-hover);
     }
 
     /* Card personalizada */
@@ -70,7 +135,7 @@ st.markdown("""
         padding: 1rem;
     }
     .card h3 {
-        color: #e0e0e0;
+        color: var(--text-primary);
         margin: 0 0 0.5rem 0;
         font-size: 0.8rem;
         text-transform: uppercase;
@@ -90,13 +155,13 @@ st.markdown("""
     }
 
     /* Colores de cambio */
-    .green { color: #00d4aa; }
-    .red { color: #ff6b6b; }
+    .green { color: var(--color-green); }
+    .red { color: var(--color-red); }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%);
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        background: var(--bg-sidebar);
+        border-right: 1px solid var(--border-card);
     }
     section[data-testid="stSidebar"] .stRadio label {
         padding: 0.5rem 0.75rem;
@@ -104,11 +169,11 @@ st.markdown("""
         transition: background 0.15s ease;
     }
     section[data-testid="stSidebar"] .stRadio label:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--bg-nav-hover);
     }
     section[data-testid="stSidebar"] div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
-        background: rgba(0, 212, 170, 0.1);
-        border: 1px solid rgba(0, 212, 170, 0.2);
+        background: var(--bg-nav-active);
+        border: 1px solid var(--border-nav-active);
         border-radius: 10px;
     }
 
@@ -125,7 +190,7 @@ st.markdown("""
 
     /* Tipografía general */
     h1, h2, h3 {
-        color: #f0f0f0 !important;
+        color: var(--text-primary) !important;
         font-weight: 600 !important;
         letter-spacing: -0.3px;
     }
@@ -134,7 +199,7 @@ st.markdown("""
 
     /* Selects y sliders */
     .stSelectbox label, .stRadio label, .stSlider label {
-        color: #aaa !important;
+        color: var(--text-label) !important;
         font-size: 0.8rem !important;
     }
 
@@ -146,7 +211,7 @@ st.markdown("""
     }
     .stButton button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        box-shadow: var(--shadow-button);
     }
 
     /* DataFrame */
@@ -157,11 +222,88 @@ st.markdown("""
 
     /* Divisor */
     hr {
-        border-color: rgba(255, 255, 255, 0.06) !important;
+        border-color: var(--border-divider) !important;
         margin: 1.5rem 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Detección de tema (dark / light)
+#
+# Streamlit guarda el tema en localStorage. Detectamos con JS y lo
+# guardamos en session_state para usarlo en Plotly y Pandas.
+# ---------------------------------------------------------------------------
+
+def _detect_theme() -> str:
+    """Detecta si el tema es 'dark' o 'light'."""
+    if "theme" not in st.session_state:
+        st.session_state.theme = "dark"  # default
+
+    # JS para leer el atributo data-theme del root de Streamlit
+    st.components.v1.html(
+        """
+        <script>
+        (function() {
+            const root = document.documentElement;
+            const theme = root.getAttribute('data-theme') || 'dark';
+            const current = window.parent.document.body.getAttribute('data-stored-theme');
+            if (theme !== current) {
+                window.parent.document.body.setAttribute('data-stored-theme', theme);
+                window.parent.postMessage({type: 'themeChange', theme: theme}, '*');
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+    return st.session_state.theme
+
+
+# ---------------------------------------------------------------------------
+# Colores adaptativos según el tema
+# ---------------------------------------------------------------------------
+
+def _theme_colors() -> dict[str, str]:
+    """Devuelve paleta de colores según el tema actual."""
+    dark = {
+        "green": "#00d4aa",
+        "red": "#ff6b6b",
+        "text": "#f0f0f0",
+        "text_secondary": "#666",
+        "grid": "#2a2a4a",
+        "bg_table": "#1a1a2e",
+        "bg_table_header": "#16213e",
+        "bg_table_border": "#2a2a4a",
+        "bg_table_text": "#f0f0f0",
+        "bg_table_header_text": "#e0e0e0",
+        "bg_table_hover": "#1e2a4a",
+        "treemap_mid": "#ffffff",
+        "fill_green": "rgba(0,212,170,0.08)",
+        "fill_red": "rgba(255,107,107,0.08)",
+    }
+    light = {
+        "green": "#00a676",
+        "red": "#e53e3e",
+        "text": "#1a1a2e",
+        "text_secondary": "#666",
+        "grid": "#e2e8f0",
+        "bg_table": "#ffffff",
+        "bg_table_header": "#f0f2f5",
+        "bg_table_border": "#e2e8f0",
+        "bg_table_text": "#1a1a2e",
+        "bg_table_header_text": "#4a5568",
+        "bg_table_hover": "#f7fafc",
+        "treemap_mid": "#f0f2f5",
+        "fill_green": "rgba(0,166,118,0.08)",
+        "fill_red": "rgba(229,62,62,0.08)",
+    }
+
+    theme = _detect_theme()
+    return light if theme == "light" else dark
+
 
 # ---------------------------------------------------------------------------
 # Conexión con la API
@@ -502,19 +644,19 @@ elif "Precio" in page:
                     end_price = df_hist["price"].iloc[-1]
                     hist_change = ((end_price - start_price) / start_price) * 100
 
+                    tc = _theme_colors()
+                    line_color = tc["green"] if hist_change >= 0 else tc["red"]
+                    fill_color = tc["fill_green"] if hist_change >= 0 else tc["fill_red"]
+
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
                         x=df_hist["timestamp"],
                         y=df_hist["price"],
                         mode="lines",
                         name="Precio",
-                        line=dict(
-                            color="#00d4aa" if hist_change >= 0 else "#ff6b6b",
-                            width=2,
-                        ),
+                        line=dict(color=line_color, width=2),
                         fill="tozeroy",
-                        fillcolor=("rgba(0,212,170,0.08)" if hist_change >= 0
-                                   else "rgba(255,107,107,0.08)"),
+                        fillcolor=fill_color,
                     ))
                     fig.update_layout(
                         height=350,
@@ -523,15 +665,15 @@ elif "Precio" in page:
                         plot_bgcolor="rgba(0,0,0,0)",
                         xaxis=dict(
                             showgrid=False,
-                            color="#666",
+                            color=tc["text_secondary"],
                             showspikes=True,
                             spikethickness=1,
                             spikedash="dot",
                         ),
                         yaxis=dict(
                             showgrid=True,
-                            gridcolor="#2a2a4a",
-                            color="#666",
+                            gridcolor=tc["grid"],
+                            color=tc["text_secondary"],
                             tickprefix="$",
                         ),
                         hovermode="x unified",
@@ -590,13 +732,15 @@ elif "Top Monedas" in page:
 
     df = pd.DataFrame(rows)
 
+    tc = _theme_colors()
+
     # Color the change column
     def color_change(val: float) -> str:
         if val > 0:
-            return "color: #00d4aa"
+            return f"color: {tc['green']}"
         elif val < 0:
-            return "color: #ff6b6b"
-        return "color: #aaa"
+            return f"color: {tc['red']}"
+        return f"color: {tc['text_secondary']}"
 
     styled = (
         df.style
@@ -608,26 +752,26 @@ elif "Top Monedas" in page:
         })
         .map(color_change, subset=["Cambio 24h"])  # type: ignore[arg-type]
         .set_properties(**{  # type: ignore[arg-type]
-            "background-color": "#1a1a2e",
-            "color": "#f0f0f0",
-            "border-color": "#2a2a4a",
+            "background-color": tc["bg_table"],
+            "color": tc["bg_table_text"],
+            "border-color": tc["bg_table_border"],
             "font-size": "14px",
         })
         .set_table_styles([
             {"selector": "th", "props": [
-                ("background-color", "#16213e"),
-                ("color", "#e0e0e0"),
+                ("background-color", tc["bg_table_header"]),
+                ("color", tc["bg_table_header_text"]),
                 ("font-weight", "600"),
-                ("border-bottom", "2px solid #2a2a4a"),
+                ("border-bottom", f"2px solid {tc['bg_table_border']}"),
                 ("text-transform", "uppercase"),
                 ("font-size", "12px"),
                 ("letter-spacing", "1px"),
             ]},
             {"selector": "td", "props": [
-                ("border-bottom", "1px solid #2a2a4a"),
+                ("border-bottom", f"1px solid {tc['bg_table_border']}"),
             ]},
             {"selector": "tr:hover", "props": [
-                ("background-color", "#1e2a4a"),
+                ("background-color", tc["bg_table_hover"]),
             ]},
         ])
     )
@@ -652,7 +796,7 @@ elif "Top Monedas" in page:
             path=["Nombre"],
             values="Market Cap",
             color="Cambio 24h",
-            color_continuous_scale=["#ff6b6b", "#ffffff", "#00d4aa"],
+            color_continuous_scale=[tc["red"], tc["treemap_mid"], tc["green"]],
             color_continuous_midpoint=0,
             title="Distribución por Market Cap",
         )
@@ -660,7 +804,7 @@ elif "Top Monedas" in page:
             height=400,
             margin=dict(l=10, r=10, t=40, b=10),
             paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#f0f0f0", size=12),
+            font=dict(color=tc["text"], size=12),
         )
         fig.update_traces(textinfo="label+value")
         st.plotly_chart(fig, use_container_width=True, key="treemap_top")
@@ -707,26 +851,28 @@ elif "Buscar" in page:
                 })
             df = pd.DataFrame(rows)
 
+            tc = _theme_colors()
+
             styled = (
                 df.style
                 .set_properties(**{  # type: ignore[arg-type]
-                    "background-color": "#1a1a2e",
-                    "color": "#f0f0f0",
-                    "border-color": "#2a2a4a",
+                    "background-color": tc["bg_table"],
+                    "color": tc["bg_table_text"],
+                    "border-color": tc["bg_table_border"],
                     "font-size": "14px",
                 })
                 .set_table_styles([
                     {"selector": "th", "props": [
-                        ("background-color", "#16213e"),
-                        ("color", "#e0e0e0"),
+                        ("background-color", tc["bg_table_header"]),
+                        ("color", tc["bg_table_header_text"]),
                         ("font-weight", "600"),
-                        ("border-bottom", "2px solid #2a2a4a"),
+                        ("border-bottom", f"2px solid {tc['bg_table_border']}"),
                         ("text-transform", "uppercase"),
                         ("font-size", "12px"),
                         ("letter-spacing", "1px"),
                     ]},
                     {"selector": "td", "props": [
-                        ("border-bottom", "1px solid #2a2a4a"),
+                        ("border-bottom", f"1px solid {tc['bg_table_border']}"),
                     ]},
                 ])
             )
