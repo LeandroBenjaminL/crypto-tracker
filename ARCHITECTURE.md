@@ -44,36 +44,47 @@ crypto-tracker/
 │   │   ├── models.py          # Entidades de dominio
 │   │   ├── exceptions.py      # Jerarquía de excepciones
 │   │   ├── price_service.py   # Lógica de negocio
+│   │   ├── pipeline.py        # 🆕 ETL: CoinGecko → PostgreSQL
 │   │   └── favorites.py       # Persistencia local de favoritos
 │   ├── adapters/
 │   │   ├── __init__.py
 │   │   ├── api_client.py      # Cliente HTTP de CoinGecko
-│   │   └── database.py        # Repositorio PostgreSQL via SQLAlchemy
-│   ├── api/                   # 🆕 Capa REST
+│   │   └── database.py        # SQLAlchemy: 3 tablas + migraciones
+│   ├── api/                   # Capa REST
 │   │   ├── __init__.py
-│   │   ├── server.py           # FastAPI — 8 endpoints + OpenAPI docs
+│   │   ├── server.py           # FastAPI — 10 endpoints + OpenAPI docs
 │   │   └── client.py           # Cliente HTTP para consumir la API
 │   ├── cli/
 │   │   ├── __init__.py
-│   │   └── commands.py        # Comandos de Click
+│   │   └── commands.py        # Click: price, list, search, pipeline
 │   └── config/
 │       ├── __init__.py
 │       └── settings.py        # Configuración desde env
+├── migrations/              # 🆕 Alembic migrations (3)
+│   ├── versions/
+│   │   ├── 0001_create_favorites_table.py
+│   │   ├── 0002_create_price_snapshots_table.py
+│   │   └── 0003_create_price_history_table.py
+│   ├── env.py
+│   ├── script.py.mako
+│   └── alembic.ini
 ├── tests/
-│   ├── test_models.py              # 23 tests — modelos de dominio
+│   ├── test_models.py              # 50 tests — modelos de dominio
 │   ├── test_price_service.py       # 30 tests — lógica de negocio
 │   ├── test_api_client.py          # 18 tests — CoinGecko HTTP mocks
 │   ├── test_cli.py                 # 17 tests — CLI con CliRunner
 │   ├── test_favorites.py           # 16 tests — persistencia JSON
-│   ├── test_database.py            # 14 tests — 🆕 SQLAlchemy + SQLite
-│   ├── test_api_server.py          # 🆕 FastAPI con TestClient
-│   └── test_api_client_http.py     # 🆕 HTTP client contra la API
+│   ├── test_database.py            # 14 tests — SQLAlchemy + SQLite
+│   ├── test_api_server.py          # FastAPI con TestClient
+│   └── test_api_client_http.py     # HTTP client contra la API
 ├── app.py                     # Dashboard Streamlit
-├── run.py                     # 🆕 Launcher: arranca API + Streamlit juntos
-├── Dockerfile                 # 🆕 Imagen Docker multi-entrypoint
-├── docker-compose.yml         # 🆕 3 servicios: API + Streamlit + PostgreSQL
+├── Dockerfile                 # 3 entrypoints: api | streamlit | pipeline
+├── docker-compose.yml         # 3 servicios: API + Streamlit + PostgreSQL
 ├── pyproject.toml
-└── .github/workflows/test.yml # CI con Python 3.10/3.11/3.12
+├── alembic.ini                # 🆕 Configuración de migraciones
+└── .github/workflows/
+    ├── test.yml               # CI: Ruff + mypy + pytest
+    └── pipeline.yml           # 🆕 Pipeline ETL cada 30 min
 ```
 
 ---
@@ -283,7 +294,63 @@ class FavoritesRepository:
 
 ---
 
-### 3. CLI — Interfaz de terminal
+### 3. Pipeline ETL — Cache de datos en PostgreSQL
+
+**Archivo:** `src/core/pipeline.py`
+
+El pipeline es un **ETL** (Extract, Transform, Load) que mantiene la base de datos actualizada para que la API nunca tenga que llamar a CoinGecko directamente.
+
+#### Frecuencia
+
+| Datos | Frecuencia | Tabla |
+|-------|-----------|-------|
+| Precios top 100 monedas | Cada 30 min | `price_snapshots` |
+| Histórico (7d, 30d, 90d) | Cada 6h | `price_history` |
+| Migraciones DB | Al arrancar | `alembic_version` |
+
+#### Cómo funciona
+
+```python
+def run(database_url, top_n=100):
+    # 1. Migraciones Alembic
+    run_migrations(database_url)
+
+    # 2. Extraer de CoinGecko
+    raw_coins = client.get_top_coins(limit=top_n)
+
+    # 3. Transformar y cargar en price_snapshots
+    rows = [PriceSnapshotRow(...) for raw in raw_coins]
+    session.add_all(rows)
+
+    # 4. Histórico (solo si pasaron +6h)
+    _refresh_history_if_stale(client, engine)
+```
+
+#### Cache-first (Opción B)
+
+Todos los endpoints de la API siguen esta estrategia:
+
+```
+Request → ¿Hay datos en DB? → Sí → 10ms 🚀
+                           → No → CoinGecko (fallback) → 1-3s
+```
+
+Esto aplica a:
+- `GET /api/price/{query}` → `get_latest_snapshot()`
+- `GET /api/prices` → `get_latest_snapshots()`
+- `GET /api/top` → `get_top_from_db()`
+- `GET /api/history/{query}` → `get_history_from_db()`
+
+#### Ejecución
+
+El pipeline se ejecuta de tres formas:
+1. **GitHub Actions**: cada 30 min automáticamente
+2. **CLI**: `crypto-tracker pipeline`
+3. **Docker**: `docker run -e DATABASE_URL=... crypto-tracker pipeline`
+
+---
+
+### 4. CLI — Interfaz de terminal
 
 **Archivo:** `src/cli/commands.py`
 
@@ -333,7 +400,7 @@ Esta capa **no existía en el diseño original**. Se agregó para desacoplar Str
 
 #### Server (`server.py`)
 
-FastAPI con 8 endpoints, OpenAPI docs automáticas en `/docs`, y precarga de datos al arrancar.
+FastAPI con 10 endpoints, OpenAPI docs automáticas en `/docs`, cache-first en PostgreSQL, y precarga mínima al arrancar.
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -523,16 +590,16 @@ SQLAlchemy 2.0 con `DeclarativeBase` y `sessionmaker` es el estándar actual. Us
 
 | Suite | Archivo | Casos | Qué testea |
 |-------|---------|-------|------------|
-| Models | `test_models.py` | 23 | Creación, igualdad, formateo, timestamps |
+| Models | `test_models.py` | 50 | Creación, igualdad, formateo, timestamps |
 | Price Service | `test_price_service.py` | 30 | Lógica de negocio, resolución de símbolos, validaciones |
 | CoinGecko Client | `test_api_client.py` | 18 | HTTP mocks, rate limit, errores 429/404/500, cache |
 | CLI | `test_cli.py` | 17 | Click CliRunner, argumentos, opciones, errores |
 | JSON Favorites | `test_favorites.py` | 16 | CRUD JSON, persistencia, corrupción de archivo |
-| DB Repository | `test_database.py` | 14 | 🆕 SQLAlchemy con SQLite in-memory |
-| API Server | `test_api_server.py` | ~20 | 🆕 FastAPI con TestClient + mocks |
-| API HTTP Client | `test_api_client_http.py` | ~16 | 🆕 Cliente HTTP con mocks de requests |
+| DB Repository | `test_database.py` | 14 | SQLAlchemy con SQLite in-memory |
+| API Server | `test_api_server.py` | ~50 | FastAPI con TestClient + mocks |
+| API HTTP Client | `test_api_client_http.py` | ~44 | Cliente HTTP con mocks de requests |
 
-**Total: ~154 tests.**
+**Total: 256 tests — 73% coverage.**
 
 ### Patrones de test por capa
 
@@ -661,14 +728,35 @@ Este es un buen ejemplo de cómo la arquitectura limpia permite evolucionar: el 
 
 ## Docker y deployment
 
-El proyecto incluye Docker multi-etapa para levantar todo el stack:
+El proyecto incluye Docker multi-entrypoint para levantar cualquier componente con la misma imagen:
+
+```dockerfile
+# Default: API
+# docker run crypto-tracker
+
+# Streamlit
+# docker run -e ENTRYPOINT=streamlit crypto-tracker
+
+# Pipeline ETL
+# docker run -e DATABASE_URL=... crypto-tracker pipeline
+```
+
+El entrypoint se resuelve con un case en el CMD:
+
+```dockerfile
+CMD ["sh", "-c", "case ${ENTRYPOINT:-api} in \
+  pipeline) crypto-tracker pipeline ;; \
+  streamlit) streamlit run app.py ;; \
+  *) uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000} ;; \
+esac"]
+```
 
 ### Docker Compose (3 servicios)
 
 ```yaml
 services:
   db:            # PostgreSQL 16 Alpine — datos persistentes
-  api:           # FastAPI — depende de db (healthcheck)
+  api:           # FastAPI — corre migraciones + precarga al arrancar
   streamlit:     # Dashboard — depende de api (healthcheck)
 ```
 
@@ -686,14 +774,14 @@ services:
 
 ### Dockerfile
 
-Una sola imagen con dos entrypoints:
+Una sola imagen con tres entrypoints (API, Streamlit, Pipeline) y configuración dinámica del puerto para Render:
 
 ```dockerfile
-# Default: API
-CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0"]
-
-# Override: Streamlit
-# docker run crypto-tracker streamlit run app.py
+CMD ["sh", "-c", "case ${ENTRYPOINT:-api} in \
+  pipeline) crypto-tracker pipeline ;; \
+  streamlit) streamlit run app.py ;; \
+  *) uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000} ;; \
+esac"]
 ```
 
 ### Makefile
