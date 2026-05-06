@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.adapters.database import FavoritesRepository, RepositoryError
+from src.adapters.database import FavoritesRepository
 
 
 @pytest.fixture

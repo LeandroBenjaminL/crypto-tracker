@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -415,6 +414,7 @@ class TestApiBaseUrl:
     def test_custom_base_url(self):
         """API_BASE_URL cambia la base."""
         import importlib
+
         import src.api.client as client
         importlib.reload(client)
         assert client._API_BASE == "http://custom:8888"

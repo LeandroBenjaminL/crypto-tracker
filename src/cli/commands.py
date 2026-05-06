@@ -296,7 +296,8 @@ def pipeline(top: int) -> None:
     Si pasaron más de 6h desde la última vez, también actualiza
     el histórico de precios (7d, 30d, 90d) para las top 20 monedas.
     """
-    from src.core.pipeline import PipelineError, run as run_pipeline
+    from src.core.pipeline import PipelineError
+    from src.core.pipeline import run as run_pipeline
 
     click.echo(click.style("▶  Pipeline ETL", bold=True))
     click.echo(f"   Monedas: {top}")

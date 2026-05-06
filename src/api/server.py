@@ -33,11 +33,7 @@ from src.core.exceptions import (
 from src.core.favorites import FavoritesManager
 from src.core.models import (
     CoinSearchResult,
-    Cryptocurrency,
-    FavoriteCoin,
-    PriceData,
 )
-from src.core.price_service import PriceService
 from src.core.pipeline import (
     PriceSnapshotRow,
     get_history_from_db,
@@ -45,6 +41,7 @@ from src.core.pipeline import (
     get_latest_snapshots,
     get_top_from_db,
 )
+from src.core.price_service import PriceService
 
 _logger = logging.getLogger("crypto-tracker.api")
 
@@ -239,7 +236,7 @@ def _try_db_price(query: str) -> CoinOut | None:
         return None
 
     # Resolver símbolo a coin_id usando el mapping local
-    from src.core.price_service import SYMBOL_TO_ID, _try_resolve_id, _normalize_query
+    from src.core.price_service import _normalize_query, _try_resolve_id
 
     try:
         coin_id = _try_resolve_id(query) or _normalize_query(query)

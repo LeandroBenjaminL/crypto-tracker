@@ -12,13 +12,11 @@ Cubre:
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 
 import pytest
 
-from src.core.favorites import FavoritesManager, FavoritesError
+from src.core.favorites import FavoritesError, FavoritesManager
 from src.core.models import FavoriteCoin
 
 

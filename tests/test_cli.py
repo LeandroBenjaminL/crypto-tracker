@@ -10,29 +10,23 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import click
 import pytest
 from click.testing import CliRunner
 
 from src.cli.commands import (
     cli,
-    list_coins,
-    price,
-    search,
 )
 from src.core.exceptions import (
     APIError,
     CoinNotFoundError,
     NetworkError,
     RateLimitError,
-    ValidationError,
 )
 from src.core.models import (
     CoinSearchResult,
     Cryptocurrency,
     PriceData,
 )
-
 
 # ------------------------------------------------------------------
 # Helpers

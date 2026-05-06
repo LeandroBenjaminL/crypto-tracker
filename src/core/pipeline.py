@@ -135,13 +135,13 @@ def _refresh_history_if_stale(
 
     Returns: cantidad de monedas actualizadas, 0 si no hizo falta.
     """
-    Session_factory = sessionmaker(bind=engine)
+    session_factory = sessionmaker(bind=engine)
     now = datetime.now(timezone.utc)
 
     # Primero: identificar qué monedas top tenemos
     top_coin_ids: list[str] = []
     try:
-        with Session_factory() as session:
+        with session_factory() as session:
             # La última tanda de snapshots nos dice las monedas top actuales
             latest_batch = (
                 session.query(PriceSnapshotRow)
@@ -168,7 +168,7 @@ def _refresh_history_if_stale(
         for days in _HISTORY_DAYS:
             # Ver si ya tenemos datos frescos
             try:
-                with Session_factory() as session:
+                with session_factory() as session:
                     existing = (
                         session.query(PriceHistoryRow)
                         .filter(
@@ -196,7 +196,7 @@ def _refresh_history_if_stale(
                 ]
                 data_json = json.dumps(clean_data)
 
-                with Session_factory() as session:
+                with session_factory() as session:
                     # Upsert: borramos lo viejo e insertamos nuevo
                     session.query(PriceHistoryRow).filter(
                         PriceHistoryRow.coin_id == coin_id,

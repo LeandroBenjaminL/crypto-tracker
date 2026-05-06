@@ -13,7 +13,6 @@ import pytest
 
 from src.core.models import CoinSearchResult, Cryptocurrency, PriceData
 
-
 # ---------------------------------------------------------------------------
 # API Service fixtures
 # ---------------------------------------------------------------------------
