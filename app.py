@@ -36,74 +36,76 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS — clean, modern cards and typography
+# Custom CSS — clean, modern cards and typography (theme-aware)
 # ---------------------------------------------------------------------------
 
-st.markdown("""
+_DARK_VARS = """
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #0f1525;
+    --bg-card: rgba(26, 26, 46, 0.7);
+    --bg-card-hover: rgba(30, 30, 54, 0.8);
+    --border-card: rgba(255, 255, 255, 0.06);
+    --border-divider: rgba(255, 255, 255, 0.06);
+    --text-primary: #f0f0f0;
+    --text-secondary: #aaa;
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --text-label: #aaa;
+    --color-green: #00d4aa;
+    --color-red: #ff6b6b;
+    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
+    --shadow-button: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --bg-table: #1a1a2e;
+    --bg-table-header: #16213e;
+    --bg-table-border: #2a2a4a;
+    --bg-table-hover: #1e2a4a;
+    --bg-table-text: #f0f0f0;
+    --bg-table-header-text: #e0e0e0;
+    --bg-sidebar: linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%);
+    --bg-nav-hover: rgba(255, 255, 255, 0.05);
+    --bg-nav-active: rgba(0, 212, 170, 0.1);
+    --border-nav-active: rgba(0, 212, 170, 0.2);
+    --grid-color: #2a2a4a;
+"""
+
+_LIGHT_VARS = """
+    --bg-primary: #f5f7fa;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.9);
+    --bg-card-hover: rgba(255, 255, 255, 0.95);
+    --border-card: rgba(0, 0, 0, 0.08);
+    --border-divider: rgba(0, 0, 0, 0.08);
+    --text-primary: #1a1a2e;
+    --text-secondary: #666;
+    --text-muted: rgba(0, 0, 0, 0.4);
+    --text-label: #666;
+    --color-green: #00a676;
+    --color-red: #e53e3e;
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
+    --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --bg-table: #ffffff;
+    --bg-table-header: #f0f2f5;
+    --bg-table-border: #e2e8f0;
+    --bg-table-hover: #f7fafc;
+    --bg-table-text: #1a1a2e;
+    --bg-table-header-text: #4a5568;
+    --bg-sidebar: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+    --bg-nav-hover: rgba(0, 0, 0, 0.04);
+    --bg-nav-active: rgba(0, 166, 118, 0.08);
+    --border-nav-active: rgba(0, 166, 118, 0.2);
+    --grid-color: #e2e8f0;
+"""
+
+# Inyectamos las variables según el tema actual
+_theme_vars = _DARK_VARS if st.session_state.get("theme", "dark") == "dark" else _LIGHT_VARS
+
+st.markdown(f"""
 <style>
-    /* ═══════════════════════════════════════════════
-       VARIABLES DE TEMA — dark (default) y light
-       ═══════════════════════════════════════════════ */
-    :root {
-        --bg-primary: #0a0e1a;
-        --bg-secondary: #0f1525;
-        --bg-card: rgba(26, 26, 46, 0.7);
-        --bg-card-hover: rgba(30, 30, 54, 0.8);
-        --border-card: rgba(255, 255, 255, 0.06);
-        --border-divider: rgba(255, 255, 255, 0.06);
-        --text-primary: #f0f0f0;
-        --text-secondary: #aaa;
-        --text-muted: rgba(255, 255, 255, 0.4);
-        --text-label: #aaa;
-        --color-green: #00d4aa;
-        --color-red: #ff6b6b;
-        --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
-        --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
-        --shadow-button: 0 4px 12px rgba(0, 0, 0, 0.3);
-        --bg-table: #1a1a2e;
-        --bg-table-header: #16213e;
-        --bg-table-border: #2a2a4a;
-        --bg-table-hover: #1e2a4a;
-        --bg-table-text: #f0f0f0;
-        --bg-table-header-text: #e0e0e0;
-        --bg-sidebar: linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%);
-        --bg-nav-hover: rgba(255, 255, 255, 0.05);
-        --bg-nav-active: rgba(0, 212, 170, 0.1);
-        --border-nav-active: rgba(0, 212, 170, 0.2);
-        --grid-color: #2a2a4a;
-    }
-
-    [data-theme="light"] {
-        --bg-primary: #f5f7fa;
-        --bg-secondary: #ffffff;
-        --bg-card: rgba(255, 255, 255, 0.9);
-        --bg-card-hover: rgba(255, 255, 255, 0.95);
-        --border-card: rgba(0, 0, 0, 0.08);
-        --border-divider: rgba(0, 0, 0, 0.08);
-        --text-primary: #1a1a2e;
-        --text-secondary: #666;
-        --text-muted: rgba(0, 0, 0, 0.4);
-        --text-label: #666;
-        --color-green: #00a676;
-        --color-red: #e53e3e;
-        --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
-        --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
-        --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.1);
-        --bg-table: #ffffff;
-        --bg-table-header: #f0f2f5;
-        --bg-table-border: #e2e8f0;
-        --bg-table-hover: #f7fafc;
-        --bg-table-text: #1a1a2e;
-        --bg-table-header-text: #4a5568;
-        --bg-sidebar: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
-        --bg-nav-hover: rgba(0, 0, 0, 0.04);
-        --bg-nav-active: rgba(0, 166, 118, 0.08);
-        --border-nav-active: rgba(0, 166, 118, 0.2);
-        --grid-color: #e2e8f0;
-    }
+    :root {{ {_theme_vars} }}
 
     /* ═══════════════════════════════════════════════
-       ESTILOS GENERALES
+       ESTILOS GENERALES (compartidos por ambos temas)
        ═══════════════════════════════════════════════ */
 
     /* Fondo general — degradé sutil */
@@ -236,29 +238,9 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 
 def _detect_theme() -> str:
-    """Detecta si el tema es 'dark' o 'light'."""
+    """Detecta el tema según la selección del sidebar."""
     if "theme" not in st.session_state:
-        st.session_state.theme = "dark"  # default
-
-    # JS para leer el atributo data-theme del root de Streamlit
-    st.components.v1.html(
-        """
-        <script>
-        (function() {
-            const root = document.documentElement;
-            const theme = root.getAttribute('data-theme') || 'dark';
-            const current = window.parent.document.body.getAttribute('data-stored-theme');
-            if (theme !== current) {
-                window.parent.document.body.setAttribute('data-stored-theme', theme);
-                window.parent.postMessage({type: 'themeChange', theme: theme}, '*');
-            }
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
+        st.session_state.theme = "dark"
     return st.session_state.theme
 
 
@@ -395,6 +377,19 @@ with st.sidebar:
         index=0,
         help="Moneda para mostrar los precios",
     )
+
+    st.divider()
+
+    # Tema — cambia colores de gráficos y tablas al instante
+    theme_choice = st.selectbox(
+        "Tema",
+        ["dark", "light"],
+        index=0 if st.session_state.get("theme", "dark") == "dark" else 1,
+        help="Cambiá el tema de la app (oscuro / claro)",
+    )
+    if theme_choice != st.session_state.get("theme"):
+        st.session_state.theme = theme_choice
+        st.rerun()
 
     st.markdown(
         "<p style='text-align: center; opacity: 0.4; font-size: 0.75rem;'>"
