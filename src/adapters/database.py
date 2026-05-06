@@ -94,6 +94,44 @@ class PriceHistoryRow(Base):
 
 
 # ---------------------------------------------------------------------------
+# Migraciones de Alembic
+# ---------------------------------------------------------------------------
+
+
+def run_migrations(database_url: str | None = None) -> None:
+    """
+    Ejecuta `alembic upgrade head` programáticamente.
+
+    Se llama al arrancar la API y al ejecutar el pipeline.
+    Si no hay DATABASE_URL configurada, no hace nada (modo dev sin DB).
+
+    Usa la URL provista o la del settings. Con eso configura Alembic
+    y aplica todas las migraciones pendientes.
+    """
+    from src.config import settings
+
+    db_url = database_url or settings.database_url
+    if not db_url:
+        _logger.info("No hay DATABASE_URL — salteando migraciones")
+        return
+
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("script_location", "migrations")
+        alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+
+        _logger.info("Corriendo migraciones de Alembic...")
+        command.upgrade(alembic_cfg, "head")
+        _logger.info("Migraciones aplicadas correctamente")
+    except Exception as exc:
+        _logger.warning("Error al correr migraciones: %s", exc)
+        raise
+
+
+# ---------------------------------------------------------------------------
 # Excepción propia del repositorio
 # ---------------------------------------------------------------------------
 

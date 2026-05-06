@@ -60,6 +60,14 @@ def run(database_url: str | None = None, top_n: int = 100) -> dict[str, int]:
         msg = "No hay DATABASE_URL configurada"
         raise PipelineError(msg)
 
+    # Migraciones de DB primero
+    from src.adapters.database import run_migrations
+
+    try:
+        run_migrations(db_url)
+    except Exception as exc:
+        _logger.warning("Migraciones fallaron, continuando igual: %s", exc)
+
     engine = create_engine(db_url, pool_pre_ping=True)
 
     # ------------------------------------------------------------------

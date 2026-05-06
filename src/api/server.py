@@ -175,7 +175,15 @@ def _precache() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> None:
-    """Arranca la precarga en background cuando levanta la API."""
+    """Corre migraciones y precarga datos en background."""
+    # 1. Migraciones de DB (si hay DATABASE_URL)
+    from src.adapters.database import run_migrations
+    try:
+        run_migrations()
+    except Exception as exc:
+        _logger.warning("Migraciones fallaron (la API igual arranca): %s", exc)
+
+    # 2. Precarga en background
     t = threading.Thread(target=_precache, daemon=True)
     t.start()
     yield
