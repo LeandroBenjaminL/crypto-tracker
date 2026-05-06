@@ -203,10 +203,11 @@ class TestHealth:
         assert data["status"] == "ok"
 
     def test_health_has_all_keys(self, client: TestClient):
-        """Health check tiene los 4 campos esperados."""
+        """Health check tiene los 5 campos esperados."""
         resp = client.get("/api/health")
         assert set(resp.json().keys()) == {
             "status", "api_key_configured", "version", "favorites_source",
+            "price_source",
         }
 
     def test_health_version_is_string(self, client: TestClient):

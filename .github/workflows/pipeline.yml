@@ -1,0 +1,34 @@
+name: Pipeline ETL
+
+on:
+  schedule:
+    # Cada 30 minutos — https://crontab.guru/#*/30_*_*_*_*
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    # También se puede ejecutar manualmente desde la UI de GitHub
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,postgres]"
+        env:
+          PIP_EXTRA_INDEX_URL: ${{ secrets.PIP_EXTRA_INDEX_URL }}
+
+      - name: Run pipeline
+        run: crypto-tracker pipeline --top 100
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}

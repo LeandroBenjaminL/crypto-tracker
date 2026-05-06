@@ -38,6 +38,11 @@ from src.core.models import (
     PriceData,
 )
 from src.core.price_service import PriceService
+from src.core.pipeline import (
+    PriceSnapshotRow,
+    get_latest_snapshot,
+    get_latest_snapshots,
+)
 
 _logger = logging.getLogger("crypto-tracker.api")
 
@@ -98,6 +103,7 @@ class HealthOut(BaseModel):
     api_key_configured: bool
     version: str
     favorites_source: str
+    price_source: str = "coingecko"  # "db" si el pipeline ya cargó datos
 
 
 class ErrorOut(BaseModel):
@@ -207,6 +213,91 @@ def _coin_to_out(result: CoinSearchResult) -> CoinOut:
     )
 
 
+def _snapshot_to_coin_out(row: PriceSnapshotRow) -> CoinOut:
+    """Convierte un PriceSnapshotRow directamente a CoinOut (sin tocar CoinGecko)."""
+    return CoinOut(
+        id=row.coin_id,
+        symbol=row.symbol,
+        name=row.name,
+        rank=row.rank or 0,
+        price=row.price,
+        change_24h=row.change_24h,
+        volume_24h=row.volume_24h,
+        market_cap=row.market_cap,
+        price_formatted=(
+            f"${row.price:,.2f}" if row.price >= 1
+            else f"${row.price:.4f}" if row.price >= 0.01
+            else f"${row.price:.8f}"
+        ),
+    )
+
+
+def _try_db_price(query: str) -> CoinOut | None:
+    """
+    Intenta resolver un precio desde PostgreSQL.
+
+    1. Resuelve el query a coin_id (símbolo → ID)
+    2. Busca el snapshot más reciente en la DB
+    3. Si hay datos frescos, devuelve CoinOut sin tocar CoinGecko
+
+    Returns None si no hay DB o no encontró datos.
+    """
+    if not settings.database_url:
+        return None
+
+    # Resolver símbolo a coin_id usando el mapping local
+    from src.core.price_service import SYMBOL_TO_ID, _try_resolve_id, _normalize_query
+
+    try:
+        coin_id = _try_resolve_id(query) or _normalize_query(query)
+    except Exception:
+        coin_id = query.strip().lower()
+
+    snapshot = get_latest_snapshot(coin_id)
+    if snapshot is None:
+        return None
+
+    return _snapshot_to_coin_out(snapshot)
+
+
+def _try_db_prices(queries: list[str]) -> tuple[dict[str, CoinOut], list[str]]:
+    """
+    Intenta resolver múltiples precios desde PostgreSQL.
+
+    Returns:
+        (found: dict {query: CoinOut}, missing: list de queries que no estaban en DB)
+    """
+    if not settings.database_url:
+        return {}, list(queries)
+
+    from src.core.price_service import SYMBOL_TO_ID, _normalize_query
+
+    # Resolver queries a coin_ids
+    coin_ids: list[str] = []
+    query_to_id: dict[str, str] = {}
+    for q in queries:
+        try:
+            cid = SYMBOL_TO_ID.get(q.strip().lower()) or _normalize_query(q)
+        except Exception:
+            cid = q.strip().lower()
+        coin_ids.append(cid)
+        query_to_id[q] = cid
+
+    # Buscar todos los snapshots en un solo query
+    snapshots = get_latest_snapshots(coin_ids)
+
+    found: dict[str, CoinOut] = {}
+    missing: list[str] = []
+    for q, cid in query_to_id.items():
+        snap = snapshots.get(cid)
+        if snap is not None:
+            found[q] = _snapshot_to_coin_out(snap)
+        else:
+            missing.append(q)
+
+    return found, missing
+
+
 def _map_error(exc: CryptoTrackerError) -> HTTPException:
     """Traduce excepciones del dominio a HTTP errors con mensajes piolas."""
     mapping: dict[type, tuple[int, str]] = {
@@ -273,10 +364,24 @@ async def cryptotracker_exception_handler(
     "/api/price/{query}",
     response_model=CoinOut,
     summary="Precio de una moneda",
-    description="Buscá por ID (bitcoin), símbolo (btc) o nombre (Bitcoin).",
+    description="Buscá por ID (bitcoin), símbolo (btc) o nombre (Bitcoin)."
+    " Si el pipeline ya cargó datos, responde desde PostgreSQL (ms)."
+    " Si no, consulta CoinGecko directamente (fallback).",
 )
 def get_price(query: str, currency: str = "usd") -> CoinOut:
-    """Precio actual de una criptomoneda."""
+    """
+    Precio actual de una criptomoneda.
+
+    Estrategia (Opción B):
+      1. Buscar en PostgreSQL (rápido, datos del pipeline)
+      2. Si no hay, llamar a CoinGecko (fallback)
+    """
+    # Intento 1: DB (si el pipeline ya pasó)
+    db_result = _try_db_price(query)
+    if db_result is not None:
+        return db_result
+
+    # Intento 2: CoinGecko (fallback)
     result = _service.get_price(query, currency=currency)
     return _coin_to_out(result)
 
@@ -290,8 +395,21 @@ def get_price(query: str, currency: str = "usd") -> CoinOut:
 def get_prices(q: str = "btc,eth", currency: str = "usd") -> list[CoinOut]:
     """Precios de varias monedas de una sola vez."""
     queries = [s.strip() for s in q.split(",") if s.strip()]
-    results = _service.get_prices(queries, currency=currency)
-    return [_coin_to_out(r) for r in results]
+
+    # Intento 1: DB (batch)
+    found, missing = _try_db_prices(queries)
+
+    # Intento 2: CoinGecko para las que no estaban en DB
+    if missing:
+        try:
+            results = _service.get_prices(missing, currency=currency)
+            for r in results:
+                found[r.coin.symbol] = _coin_to_out(r)
+        except Exception:
+            pass  # las que no se pudieron, se pierden
+
+    # Devolver en el mismo orden que se pidieron
+    return [found[q] for q in queries if q in found]
 
 
 @app.get(
@@ -408,9 +526,26 @@ def remove_favorite(symbol: str) -> None:
 )
 def health() -> HealthOut:
     """Endpoint de health check para monitoreo."""
+    # Detectar si el pipeline ya cargó datos en la DB
+    price_source = "coingecko"
+    if settings.database_url:
+        try:
+            from sqlalchemy import create_engine, text
+            engine = create_engine(settings.database_url, pool_pre_ping=True)
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT COUNT(*) FROM price_snapshots")
+                )
+                count = result.scalar()
+                if count and count > 0:
+                    price_source = "db"
+        except Exception:
+            pass
+
     return HealthOut(
         status="ok",
         api_key_configured=bool(settings.coingecko_api_key),
         version=_VERSION,
         favorites_source=_favorites_source,
+        price_source=price_source,
     )

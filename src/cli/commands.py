@@ -280,6 +280,47 @@ def search(query: str) -> None:
         _handle_error(e)
 
 
+@cli.command()
+@click.option(
+    "--top",
+    "-n",
+    default=100,
+    show_default=True,
+    help="Cuantas monedas traer (max 250)",
+)
+def pipeline(top: int) -> None:
+    """
+    Ejecuta el pipeline ETL: CoinGecko → PostgreSQL.
+
+    Extrae las top N criptos, las transforma y las guarda
+    en la tabla price_snapshots para que la API responda rápido.
+    """
+    from src.core.pipeline import PipelineError, run as run_pipeline
+
+    click.echo(click.style("▶  Pipeline ETL", bold=True))
+    click.echo(f"   Monedas: {top}")
+    click.echo(f"   DB:      {settings.database_url or '❌ no configurada'}")
+
+    if not settings.database_url:
+        click.echo(
+            click.style(
+                "\n[!] DATABASE_URL no está configurada. Seteala en .env",
+                fg="red",
+            )
+        )
+        return
+
+    try:
+        inserted = run_pipeline(top_n=top)
+        click.echo(
+            click.style(f"\n✅ Pipeline completado: {inserted} snapshots", fg="green")
+        )
+    except PipelineError as e:
+        click.echo(click.style(f"\n[X] Error en pipeline: {e}", fg="red"))
+    except Exception as e:
+        click.echo(click.style(f"\n[!] Error inesperado: {e}", fg="red"))
+
+
 # ------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------

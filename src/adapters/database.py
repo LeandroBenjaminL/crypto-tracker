@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Column, DateTime, String, create_engine
+from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -40,6 +40,32 @@ class FavoriteRow(Base):
 
     symbol: str = Column(String(50), primary_key=True)
     added_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class PriceSnapshotRow(Base):
+    """
+    Una fila en la tabla price_snapshots.
+
+    Guarda el precio de una cripto en un momento específico.
+    Cada corrida del pipeline inserta N filas (una por moneda).
+    """
+
+    __tablename__ = "price_snapshots"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    coin_id: str = Column(String(100), nullable=False, index=True)
+    symbol: str = Column(String(20), nullable=False)
+    name: str = Column(String(100), nullable=False)
+    price: float = Column(Float, nullable=False)
+    change_24h: float = Column(Float, nullable=True)
+    volume_24h: float = Column(Float, nullable=True)
+    market_cap: float = Column(Float, nullable=True)
+    rank: int = Column(Integer, nullable=True)
+    snapshot_at: datetime = Column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
