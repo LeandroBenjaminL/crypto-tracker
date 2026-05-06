@@ -35,5 +35,7 @@ COPY tests/ tests/
 # Puerto de la API (Streamlit usa 8501 por defecto)
 EXPOSE 8000 8501
 
-# Por defecto arranca la API. Se puede override con "streamlit"
-CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Por defecto arranca la API.
+# Usa $PORT si está definida (Render la asigna automáticamente),
+# sino usa 8000 para desarrollo local.
+CMD uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000}
