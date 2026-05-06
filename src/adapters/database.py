@@ -120,6 +120,31 @@ class PipelineRunRow(Base):
     trigger: str = Column(String(50), nullable=False, default="manual")  # manual | schedule
 
 
+class PriceAlertRow(Base):
+    """
+    Una alerta de precio configurada por el usuario.
+
+    Se crea con un coin_id, un precio objetivo y una condición
+    (above/below). El pipeline checkea las activas después de
+    cada snapshot y las marca como triggered cuando se cumplen.
+    """
+
+    __tablename__ = "price_alerts"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    coin_id: str = Column(String(100), nullable=False, index=True)
+    target_price: float = Column(Float, nullable=False)
+    condition: str = Column(String(10), nullable=False)  # above | below
+    symbol: str = Column(String(20), nullable=True)
+    is_active: bool = Column(Integer, default=True)  # SQLAlchemy: Integer como bool
+    triggered_at: datetime = Column(DateTime(timezone=True), nullable=True)
+    created_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Migraciones de Alembic
 # ---------------------------------------------------------------------------

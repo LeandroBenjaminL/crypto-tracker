@@ -280,6 +280,173 @@ def search(query: str) -> None:
         _handle_error(e)
 
 
+# ------------------------------------------------------------------
+# Alertas de precio
+# ------------------------------------------------------------------
+
+
+@cli.group()
+def alert() -> None:
+    """Gestioná alertas de precios de criptomonedas."""
+
+
+@alert.command()
+@click.argument("coin")
+@click.option("--above", type=float, help="Precio máximo (avisa cuando supere)")
+@click.option("--below", type=float, help="Precio mínimo (avisa cuando baje)")
+def add(coin: str, above: float | None, below: float | None) -> None:
+    """Creá una alerta de precio.
+
+    Ejemplos:
+        crypto-tracker alert add btc --above 100000
+        crypto-tracker alert add eth --below 1500
+    """
+    if above and below:
+        click.echo(click.style("[!] Elegí --above O --below, no ambos", fg="red"))
+        return
+    if not above and not below:
+        click.echo(click.style("[!] Necesitás --above o --below", fg="red"))
+        return
+
+    condition = "above" if above else "below"
+    target = above or below
+
+    if not settings.database_url:
+        click.echo(click.style("[!] Se necesita PostgreSQL para alertas", fg="red"))
+        return
+
+    from datetime import datetime, timezone
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+    from src.core.price_service import SYMBOL_TO_ID
+
+    coin_id = SYMBOL_TO_ID.get(coin.strip().lower(), coin.strip().lower())
+    engine = create_engine(settings.database_url)
+
+    row = PriceAlertRow(
+        coin_id=coin_id,
+        symbol=coin,
+        target_price=float(target),  # type: ignore[arg-type]
+        condition=condition,
+        is_active=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    with Session(engine) as session:
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+    dir_str = "📈 supere" if condition == "above" else "📉 baje de"
+    click.echo(
+        click.style(
+            f"✅ Alerta #{row.id} creada: {coin} {dir_str} ${target:,.2f}",
+            fg="green",
+        )
+    )
+
+
+@alert.command(name="list")
+def list_alerts() -> None:
+    """Mostrá todas las alertas activas."""
+    if not settings.database_url:
+        click.echo(click.style("[!] Se necesita PostgreSQL para alertas", fg="red"))
+        return
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        rows = (
+            session.query(PriceAlertRow)
+            .filter(PriceAlertRow.is_active == 1)
+            .order_by(PriceAlertRow.created_at.desc())
+            .all()
+        )
+
+    if not rows:
+        click.echo(click.style("  No tenés alertas activas.", dim=True))
+        return
+
+    click.echo(click.style("\n🔔 Alertas activas:\n", bold=True))
+    for r in rows:
+        dir_str = "📈 >" if r.condition == "above" else "📉 <"
+        click.echo(
+            f"  #{r.id}  {r.coin_id:<12} {dir_str} ${r.target_price:>10,.2f}  "
+            f"(creada {r.created_at.strftime('%d/%m %H:%M')})"
+        )
+
+
+@alert.command()
+@click.argument("alert_id", type=int)
+def remove(alert_id: int) -> None:
+    """Cancelá una alerta por su ID."""
+    if not settings.database_url:
+        click.echo(click.style("[!] Se necesita PostgreSQL para alertas", fg="red"))
+        return
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        alert = session.query(PriceAlertRow).filter(PriceAlertRow.id == alert_id).first()
+        if alert is None:
+            click.echo(click.style(f"[X] Alerta #{alert_id} no encontrada", fg="red"))
+            return
+        alert.is_active = 0
+        session.commit()
+
+    click.echo(click.style(f"✅ Alerta #{alert_id} cancelada", fg="green"))
+
+
+@alert.command()
+def triggered() -> None:
+    """Mostrá alertas que ya se dispararon."""
+    if not settings.database_url:
+        click.echo(click.style("[!] Se necesita PostgreSQL para alertas", fg="red"))
+        return
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        rows = (
+            session.query(PriceAlertRow)
+            .filter(PriceAlertRow.is_active == 0)
+            .filter(PriceAlertRow.triggered_at.isnot(None))
+            .order_by(PriceAlertRow.triggered_at.desc())
+            .all()
+        )
+
+    if not rows:
+        click.echo(click.style("  No hay alertas disparadas aún.", dim=True))
+        return
+
+    click.echo(click.style("\n🔔 Alertas disparadas:\n", bold=True))
+    for r in rows:
+        dir_str = "📈 superó" if r.condition == "above" else "📉 bajó de"
+        click.echo(
+            f"  #{r.id}  {r.coin_id:<12} {dir_str} ${r.target_price:>10,.2f}  "
+            f"(el {r.triggered_at.strftime('%d/%m %H:%M')})"
+        )
+
+
+# ------------------------------------------------------------------
+# Pipeline ETL
+# ------------------------------------------------------------------
+
+
 @cli.group(invoke_without_command=True)
 @click.pass_context
 def pipeline(ctx: click.Context) -> None:

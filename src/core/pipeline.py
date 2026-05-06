@@ -130,7 +130,20 @@ def run(
         stats: dict[str, int] = {"snapshots": len(rows), "history_updated": 0}
 
         # ------------------------------------------------------------------
-        # 2. Histórico de precios (cada 6h)
+        # 2. Checkear alertas de precio
+        # ------------------------------------------------------------------
+        triggered = check_alerts(engine)
+        if triggered:
+            stats["alerts_triggered"] = len(triggered)
+            for alert in triggered:
+                _logger.info(
+                    "🔔 Alerta #%(id)s: %(coin_id)s %(condition)s $%(target_price)s "
+                    "(ahora $%(current_price)s)",
+                    alert,
+                )
+
+        # ------------------------------------------------------------------
+        # 3. Histórico de precios (cada 6h)
         # ------------------------------------------------------------------
         history_updated = _refresh_history_if_stale(client, engine)
         if history_updated:
@@ -174,6 +187,93 @@ def _save_run_record(engine: Any, record: PipelineRunRow) -> None:
             session.commit()
     except Exception as exc:
         _logger.warning("No se pudo guardar el registro de pipeline: %s", exc)
+
+
+# ======================================================================
+# Alertas de precio
+# ======================================================================
+
+
+def check_alerts(engine: Any) -> list[dict[str, Any]]:
+    """
+    Checkea las alertas activas contra los últimos snapshots.
+
+    Después de cada corrida del pipeline, revisa si algún precio
+    cruzó el umbral de alguna alerta y la marca como triggered.
+
+    Returns: lista de alertas que se dispararon.
+    """
+    from src.adapters.database import PriceAlertRow
+
+    triggered: list[dict[str, Any]] = []
+
+    try:
+        with Session(engine) as session:
+            # Alertas activas
+            alerts = (
+                session.query(PriceAlertRow)
+                .filter(PriceAlertRow.is_active == 1)
+                .all()
+            )
+            if not alerts:
+                return []
+
+            # Últimos snapshots (el batch recién insertado)
+            latest_time = (
+                session.query(PriceSnapshotRow.snapshot_at)
+                .order_by(PriceSnapshotRow.snapshot_at.desc())
+                .first()
+            )
+            if not latest_time:
+                return []
+
+            for alert in alerts:
+                # Buscar el snapshot para esta moneda
+                snapshot = (
+                    session.query(PriceSnapshotRow)
+                    .filter(
+                        PriceSnapshotRow.coin_id == alert.coin_id,
+                        PriceSnapshotRow.snapshot_at == latest_time[0],
+                    )
+                    .first()
+                )
+                if snapshot is None:
+                    continue
+
+                # Checkear condición
+                should_trigger = False
+                if alert.condition == "above" and snapshot.price >= alert.target_price:
+                    should_trigger = True
+                elif alert.condition == "below" and snapshot.price <= alert.target_price:
+                    should_trigger = True
+
+                if should_trigger:
+                    from datetime import datetime, timezone
+
+                    alert.is_active = 0
+                    alert.triggered_at = datetime.now(timezone.utc)
+                    triggered.append({
+                        "id": alert.id,
+                        "coin_id": alert.coin_id,
+                        "symbol": alert.symbol or alert.coin_id,
+                        "target_price": alert.target_price,
+                        "current_price": snapshot.price,
+                        "condition": alert.condition,
+                    })
+                    _logger.info(
+                        "🔔 Alerta #%s: %s %s $%s (ahora $%s)",
+                        alert.id,
+                        alert.coin_id,
+                        "subió a" if alert.condition == "above" else "bajó a",
+                        alert.target_price,
+                        snapshot.price,
+                    )
+
+            session.commit()
+    except Exception as exc:
+        _logger.warning("Error al checkear alertas: %s", exc)
+
+    return triggered
 
 
 # ======================================================================

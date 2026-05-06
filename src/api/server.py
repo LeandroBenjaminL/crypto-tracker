@@ -545,6 +545,193 @@ def remove_favorite(symbol: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Price Alerts
+# ---------------------------------------------------------------------------
+
+
+class AlertOut(BaseModel):
+    """Alerta como la ve el usuario."""
+
+    id: int
+    coin_id: str
+    symbol: str | None
+    target_price: float
+    condition: str
+    is_active: bool
+    triggered_at: str | None
+    created_at: str
+
+
+class AlertCreate(BaseModel):
+    """Datos para crear una alerta."""
+
+    coin_id: str
+    target_price: float
+    condition: str = "above"  # above | below
+    symbol: str | None = None
+
+
+class AlertTriggeredOut(BaseModel):
+    """Alerta que se disparó."""
+
+    id: int
+    coin_id: str
+    symbol: str | None
+    target_price: float
+    condition: str
+    triggered_at: str
+
+
+@app.post(
+    "/api/alerts",
+    response_model=AlertOut,
+    status_code=201,
+    summary="Crear alerta de precio",
+    description="Ej: avisame cuando Bitcoin supere los $100,000",
+)
+def create_alert(data: AlertCreate) -> AlertOut:
+    """Crea una alerta de precio."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+    from src.core.price_service import SYMBOL_TO_ID
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita PostgreSQL para alertas")
+
+    # Resolver símbolo a coin_id si es necesario
+    coin_id = SYMBOL_TO_ID.get(data.coin_id.strip().lower(), data.coin_id.strip().lower())
+
+    engine = create_engine(settings.database_url)
+    row = PriceAlertRow(
+        coin_id=coin_id,
+        symbol=data.symbol or coin_id,
+        target_price=data.target_price,
+        condition=data.condition,
+        is_active=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    with Session(engine) as session:
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+    return AlertOut(
+        id=row.id,
+        coin_id=row.coin_id,
+        symbol=row.symbol,
+        target_price=row.target_price,
+        condition=row.condition,
+        is_active=bool(row.is_active),
+        triggered_at=row.triggered_at.isoformat() if row.triggered_at else None,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@app.get(
+    "/api/alerts",
+    response_model=list[AlertOut],
+    summary="Listar alertas",
+    description="Todas las alertas activas (no triggered).",
+)
+def list_alerts() -> list[AlertOut]:
+    """Lista alertas activas."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    if not settings.database_url:
+        return []
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        rows = (
+            session.query(PriceAlertRow)
+            .filter(PriceAlertRow.is_active == 1)
+            .order_by(PriceAlertRow.created_at.desc())
+            .all()
+        )
+        return [
+            AlertOut(
+                id=r.id,
+                coin_id=r.coin_id,
+                symbol=r.symbol,
+                target_price=r.target_price,
+                condition=r.condition,
+                is_active=bool(r.is_active),
+                triggered_at=r.triggered_at.isoformat() if r.triggered_at else None,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in rows
+        ]
+
+
+@app.get(
+    "/api/alerts/triggered",
+    response_model=list[AlertTriggeredOut],
+    summary="Alertas disparadas",
+    description="Alertas que ya se cumplieron.",
+)
+def list_triggered_alerts() -> list[AlertTriggeredOut]:
+    """Lista alertas que ya se dispararon."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    if not settings.database_url:
+        return []
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        rows = (
+            session.query(PriceAlertRow)
+            .filter(PriceAlertRow.is_active == 0)
+            .order_by(PriceAlertRow.triggered_at.desc())
+            .all()
+        )
+        return [
+            AlertTriggeredOut(
+                id=r.id,
+                coin_id=r.coin_id,
+                symbol=r.symbol,
+                target_price=r.target_price,
+                condition=r.condition,
+                triggered_at=r.triggered_at.isoformat(),
+            )
+            for r in rows
+        ]
+
+
+@app.delete(
+    "/api/alerts/{alert_id}",
+    status_code=204,
+    summary="Cancelar alerta",
+)
+def delete_alert(alert_id: int) -> None:
+    """Cancela una alerta (la desactiva, no la borra)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from src.adapters.database import PriceAlertRow
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita PostgreSQL para alertas")
+
+    engine = create_engine(settings.database_url)
+    with Session(engine) as session:
+        alert = session.query(PriceAlertRow).filter(PriceAlertRow.id == alert_id).first()
+        if alert is None:
+            raise HTTPException(404, "Alerta no encontrada")
+        alert.is_active = 0
+        session.commit()
+
+
+# ---------------------------------------------------------------------------
 # Pipeline monitoring
 # ---------------------------------------------------------------------------
 
