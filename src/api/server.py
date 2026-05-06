@@ -545,6 +545,26 @@ def remove_favorite(symbol: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pipeline monitoring
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/api/pipeline/stats",
+    summary="Estadísticas del pipeline ETL",
+    description="Muestra cantidad de ejecuciones, tasa de éxito, última corrida.",
+)
+def pipeline_stats() -> dict:
+    """Estadísticas de las ejecuciones del pipeline."""
+    from src.core.pipeline import get_pipeline_stats
+
+    stats = get_pipeline_stats()
+    if stats is None:
+        return {"total_runs": 0, "message": "No hay DB o no hay datos aún"}
+    return stats
+
+
+# ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
 

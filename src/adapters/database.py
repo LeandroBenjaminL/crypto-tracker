@@ -93,6 +93,33 @@ class PriceHistoryRow(Base):
     )
 
 
+class PipelineRunRow(Base):
+    """
+    Registro de una ejecución del pipeline ETL.
+
+    Cada vez que corre el pipeline (cada 30min en GitHub Actions,
+    o manual), se guarda una fila acá. Permite monitorear
+    estado, tiempos y errores.
+    """
+
+    __tablename__ = "pipeline_runs"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    started_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    finished_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    status: str = Column(String(20), nullable=False, default="running")  # running | success | error
+    snapshots_inserted: int = Column(Integer, default=0)
+    history_updated: int = Column(Integer, default=0)
+    error_message: str = Column(Text, nullable=True)
+    trigger: str = Column(String(50), nullable=False, default="manual")  # manual | schedule
+
+
 # ---------------------------------------------------------------------------
 # Migraciones de Alembic
 # ---------------------------------------------------------------------------

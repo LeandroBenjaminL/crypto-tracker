@@ -24,7 +24,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.adapters.api_client import CoinGeckoClient
-from src.adapters.database import PriceHistoryRow, PriceSnapshotRow
+from src.adapters.database import (
+    PipelineRunRow,
+    PriceHistoryRow,
+    PriceSnapshotRow,
+)
 from src.config import settings
 
 _logger = logging.getLogger("crypto-tracker.pipeline")
@@ -44,13 +48,18 @@ _HISTORY_TTL = timedelta(hours=6)
 # ======================================================================
 
 
-def run(database_url: str | None = None, top_n: int = 100) -> dict[str, int]:
+def run(
+    database_url: str | None = None,
+    top_n: int = 100,
+    trigger: str = "manual",
+) -> dict[str, int]:
     """
     Ejecuta el pipeline ETL completo.
 
     Args:
         database_url: URL de PostgreSQL. Si no se pasa, usa la de settings.
         top_n: Cantidad de monedas a traer (default 100, max 250).
+        trigger: "manual" o "schedule" para el registro de monitoreo.
 
     Returns:
         Dict con stats: {"snapshots": N, "history_updated": bool}
@@ -59,6 +68,13 @@ def run(database_url: str | None = None, top_n: int = 100) -> dict[str, int]:
     if not db_url:
         msg = "No hay DATABASE_URL configurada"
         raise PipelineError(msg)
+
+    # Registro de la corrida
+    run_record = PipelineRunRow(
+        started_at=datetime.now(timezone.utc),
+        status="running",
+        trigger=trigger,
+    )
 
     # Migraciones de DB primero
     from src.adapters.database import run_migrations
@@ -70,63 +86,94 @@ def run(database_url: str | None = None, top_n: int = 100) -> dict[str, int]:
 
     engine = create_engine(db_url, pool_pre_ping=True)
 
-    # ------------------------------------------------------------------
-    # 1. Snapshots de precios (cada 30 min)
-    # ------------------------------------------------------------------
-    _logger.info("Extrayendo top %s desde CoinGecko...", top_n)
-    client = CoinGeckoClient(
-        base_url=settings.coingecko_base_url,
-        api_key=settings.coingecko_api_key,
-    )
+    try:
+        # ------------------------------------------------------------------
+        # 1. Snapshots de precios (cada 30 min)
+        # ------------------------------------------------------------------
+        _logger.info("Extrayendo top %s desde CoinGecko...", top_n)
+        client = CoinGeckoClient(
+            base_url=settings.coingecko_base_url,
+            api_key=settings.coingecko_api_key,
+        )
 
-    raw_coins = client.get_top_coins(limit=top_n, currency="usd")
-    _logger.info("Recibidas %s monedas", len(raw_coins))
+        raw_coins = client.get_top_coins(limit=top_n, currency="usd")
+        _logger.info("Recibidas %s monedas", len(raw_coins))
 
-    now = datetime.now(timezone.utc)
-    rows: list[PriceSnapshotRow] = []
+        now = datetime.now(timezone.utc)
+        rows: list[PriceSnapshotRow] = []
 
-    for raw in raw_coins:
+        for raw in raw_coins:
+            try:
+                row = PriceSnapshotRow(
+                    coin_id=raw.get("id", ""),
+                    symbol=raw.get("symbol", ""),
+                    name=raw.get("name", ""),
+                    price=float(raw.get("current_price", 0) or 0),
+                    change_24h=_safe_float(raw, "price_change_percentage_24h"),
+                    volume_24h=_safe_float(raw, "total_volume"),
+                    market_cap=_safe_float(raw, "market_cap"),
+                    rank=raw.get("market_cap_rank"),
+                    snapshot_at=now,
+                )
+                rows.append(row)
+            except (ValueError, TypeError) as exc:
+                _logger.warning("Saltando moneda inválida %s: %s", raw.get("id"), exc)
+
+        if not rows:
+            msg = "No se pudo extraer ninguna moneda válida"
+            raise PipelineError(msg)
+
+        with Session(engine) as session:
+            session.add_all(rows)
+            session.commit()
+
+        stats: dict[str, int] = {"snapshots": len(rows), "history_updated": 0}
+
+        # ------------------------------------------------------------------
+        # 2. Histórico de precios (cada 6h)
+        # ------------------------------------------------------------------
+        history_updated = _refresh_history_if_stale(client, engine)
+        if history_updated:
+            stats["history_updated"] = history_updated
+        else:
+            stats["history_updated"] = 0
+
+        # ------------------------------------------------------------------
+        # 3. Guardar registro exitoso
+        # ------------------------------------------------------------------
+        run_record.status = "success"
+        run_record.snapshots_inserted = stats["snapshots"]
+        run_record.history_updated = stats["history_updated"]
+        run_record.finished_at = datetime.now(timezone.utc)
+        _save_run_record(engine, run_record)
+
+        _logger.info(
+            "Pipeline completado: %s snapshots, %s históricos",
+            stats["snapshots"],
+            stats["history_updated"],
+        )
+        return stats
+
+    except Exception as exc:
+        # Guardar registro con error
+        run_record.status = "error"
+        run_record.error_message = str(exc)
+        run_record.finished_at = datetime.now(timezone.utc)
         try:
-            row = PriceSnapshotRow(
-                coin_id=raw.get("id", ""),
-                symbol=raw.get("symbol", ""),
-                name=raw.get("name", ""),
-                price=float(raw.get("current_price", 0) or 0),
-                change_24h=_safe_float(raw, "price_change_percentage_24h"),
-                volume_24h=_safe_float(raw, "total_volume"),
-                market_cap=_safe_float(raw, "market_cap"),
-                rank=raw.get("market_cap_rank"),
-                snapshot_at=now,
-            )
-            rows.append(row)
-        except (ValueError, TypeError) as exc:
-            _logger.warning("Saltando moneda inválida %s: %s", raw.get("id"), exc)
+            _save_run_record(engine, run_record)
+        except Exception:
+            pass  # no romper por un error de logging
+        raise
 
-    if not rows:
-        msg = "No se pudo extraer ninguna moneda válida"
-        raise PipelineError(msg)
 
-    with Session(engine) as session:
-        session.add_all(rows)
-        session.commit()
-
-    stats: dict[str, int] = {"snapshots": len(rows), "history_updated": 0}
-
-    # ------------------------------------------------------------------
-    # 2. Histórico de precios (cada 6h)
-    # ------------------------------------------------------------------
-    history_updated = _refresh_history_if_stale(client, engine)
-    if history_updated:
-        stats["history_updated"] = history_updated
-    else:
-        stats["history_updated"] = 0
-
-    _logger.info(
-        "Pipeline completado: %s snapshots, %s históricos actualizados",
-        stats["snapshots"],
-        stats["history_updated"],
-    )
-    return stats
+def _save_run_record(engine: Any, record: PipelineRunRow) -> None:
+    """Guarda un registro de corrida del pipeline en la DB."""
+    try:
+        with Session(engine) as session:
+            session.add(record)
+            session.commit()
+    except Exception as exc:
+        _logger.warning("No se pudo guardar el registro de pipeline: %s", exc)
 
 
 # ======================================================================
@@ -359,6 +406,81 @@ def get_history_from_db(
             return json.loads(row.data)
     except Exception:
         _logger.exception("Error al leer history de %s %sd", coin_id, days)
+        return None
+
+
+# ======================================================================
+# Monitoreo del pipeline
+# ======================================================================
+
+
+def get_pipeline_stats() -> dict[str, Any] | None:
+    """
+    Estadísticas de las ejecuciones del pipeline.
+
+    Returns: dict con total_runs, success_rate, last_run, etc.
+    """
+    engine = _get_engine()
+    if engine is None:
+        return None
+
+    try:
+        from sqlalchemy import func
+
+        with Session(engine) as session:
+            total = session.query(func.count(PipelineRunRow.id)).scalar() or 0
+            success = (
+                session.query(func.count(PipelineRunRow.id))
+                .filter(PipelineRunRow.status == "success")
+                .scalar()
+                or 0
+            )
+            last_run = (
+                session.query(PipelineRunRow)
+                .order_by(PipelineRunRow.started_at.desc())
+                .first()
+            )
+            recent_runs = (
+                session.query(PipelineRunRow)
+                .order_by(PipelineRunRow.started_at.desc())
+                .limit(5)
+                .all()
+            )
+
+        success_rate = round((success / total * 100) if total > 0 else 0, 1)
+
+        return {
+            "total_runs": total,
+            "successful_runs": success,
+            "failed_runs": total - success,
+            "success_rate": success_rate,
+            "last_run": {
+                "status": last_run.status,
+                "started_at": last_run.started_at.isoformat(),
+                "finished_at": last_run.finished_at.isoformat() if last_run.finished_at else None,
+                "snapshots": last_run.snapshots_inserted,
+                "history": last_run.history_updated,
+                "error": last_run.error_message,
+                "trigger": last_run.trigger,
+            }
+            if last_run
+            else None,
+            "recent_runs": [
+                {
+                    "id": r.id,
+                    "status": r.status,
+                    "started_at": r.started_at.isoformat(),
+                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                    "snapshots": r.snapshots_inserted,
+                    "history": r.history_updated,
+                    "error": r.error_message,
+                    "trigger": r.trigger,
+                }
+                for r in recent_runs
+            ],
+        }
+    except Exception:
+        _logger.exception("Error al leer estadísticas del pipeline")
         return None
 
 

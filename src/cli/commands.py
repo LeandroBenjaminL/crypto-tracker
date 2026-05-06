@@ -280,7 +280,20 @@ def search(query: str) -> None:
         _handle_error(e)
 
 
-@cli.command()
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def pipeline(ctx: click.Context) -> None:
+    """
+    Pipeline ETL: CoinGecko → PostgreSQL.
+
+    Sin subcomando, ejecuta el pipeline completo.
+    Usá 'pipeline stats' para ver estadísticas de ejecuciones.
+    """
+    if ctx.invoked_subcommand is None:
+        # Default: correr el pipeline
+        _run_pipeline()
+
+
 @click.option(
     "--top",
     "-n",
@@ -288,19 +301,55 @@ def search(query: str) -> None:
     show_default=True,
     help="Cuantas monedas traer (max 250)",
 )
-def pipeline(top: int) -> None:
-    """
-    Ejecuta el pipeline ETL: CoinGecko → PostgreSQL.
+@pipeline.command()
+def run(top: int) -> None:
+    """Ejecuta el pipeline ETL."""
+    _run_pipeline(top_n=top)
 
-    Extrae las top N criptos y guarda snapshots de precios.
-    Si pasaron más de 6h desde la última vez, también actualiza
-    el histórico de precios (7d, 30d, 90d) para las top 20 monedas.
-    """
+
+@pipeline.command()
+def stats() -> None:
+    """Muestra estadísticas de las ejecuciones del pipeline."""
+    from src.core.pipeline import get_pipeline_stats
+
+    click.echo(click.style("📊 Pipeline Stats", bold=True))
+
+    if not settings.database_url:
+        click.echo(
+            click.style("\n[!] DATABASE_URL no está configurada.", fg="red")
+        )
+        return
+
+    s = get_pipeline_stats()
+    if s is None or s.get("total_runs", 0) == 0:
+        click.echo(click.style("  No hay ejecuciones registradas aún.", dim=True))
+        return
+
+    click.echo(f"  Ejecuciones totales: {s['total_runs']}")
+    click.echo(f"  Exitosas:            {s['successful_runs']}")
+    click.echo(f"  Fallidas:            {s['failed_runs']}")
+    click.echo(f"  Tasa de éxito:       {s['success_rate']}%")
+
+    last = s.get("last_run")
+    if last:
+        click.echo()
+        click.echo(click.style("  Última ejecución:", bold=True))
+        status_color = "green" if last["status"] == "success" else "red"
+        click.echo(f"    Estado:  {click.style(last['status'], fg=status_color)}")
+        click.echo(f"    Inicio:  {last['started_at'][:19]}")
+        click.echo(f"    Trigger: {last['trigger']}")
+        click.echo(f"    Snapshots: {last['snapshots']}  |  Histórico: {last['history']}")
+        if last.get("error"):
+            click.echo(click.style(f"    Error: {last['error']}", fg="red"))
+
+
+def _run_pipeline(top_n: int = 100) -> None:
+    """Ejecuta el pipeline y muestra resultados."""
     from src.core.pipeline import PipelineError
     from src.core.pipeline import run as run_pipeline
 
     click.echo(click.style("▶  Pipeline ETL", bold=True))
-    click.echo(f"   Monedas: {top}")
+    click.echo(f"   Monedas: {top_n}")
     click.echo(f"   DB:      {settings.database_url or '❌ no configurada'}")
 
     if not settings.database_url:
@@ -313,7 +362,7 @@ def pipeline(top: int) -> None:
         return
 
     try:
-        stats = run_pipeline(top_n=top)
+        stats = run_pipeline(top_n=top_n, trigger="manual")
         snapshots = stats.get("snapshots", 0)
         history = stats.get("history_updated", 0)
         click.echo(
