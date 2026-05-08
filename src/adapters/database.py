@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from src.core.exceptions import CryptoTrackerError
-from src.core.models import FavoriteCoin
+from src.core.models import FavoriteCoin, PortfolioHolding
 
 _logger = logging.getLogger("crypto-tracker.db")
 
@@ -143,6 +143,29 @@ class PriceAlertRow(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class PortfolioHoldingRow(Base):
+    """
+    Una fila en la tabla portfolio_holdings.
+
+    Guarda las posiciones del usuario: qué moneda, cuántos tokens,
+    y a qué precio se compraron. Sirve para calcular P&L.
+    """
+
+    __tablename__ = "portfolio_holdings"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    coin_id: str = Column(String(100), nullable=False, index=True)
+    symbol: str = Column(String(20), nullable=False)
+    quantity: float = Column(Float, nullable=False)
+    purchase_price: float = Column(Float, nullable=False)
+    created_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: datetime = Column(DateTime(timezone=True), nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -291,8 +314,214 @@ class FavoritesRepository:
                     session.query(FavoriteRow)
                     .filter(FavoriteRow.symbol == normalized)
                     .first()
-                    is not None
-                )
+                ) is not None
         except OperationalError as exc:
             _logger.error("DB error checking favorite '%s': %s", normalized, exc)
             raise RepositoryError("No se pudo verificar el favorito") from exc
+
+
+class PortfolioRepository:
+    """
+    Repositorio de holdings de portfolio contra PostgreSQL.
+
+    Maneja las posiciones del usuario: crear, leer, actualizar,
+    y eliminar holdings. Calcula P&L basado en precios actuales.
+    """
+
+    def __init__(
+        self,
+        database_url: str,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+    ) -> None:
+        kwargs: dict[str, Any] = {"pool_pre_ping": True}
+        if not database_url.startswith("sqlite"):
+            kwargs["pool_size"] = pool_size
+            kwargs["max_overflow"] = max_overflow
+
+        self._engine = create_engine(database_url, **kwargs)
+        self._session_factory = sessionmaker(bind=self._engine)
+
+        # Crear tablas si no existen
+        Base.metadata.create_all(self._engine)
+
+    # ------------------------------------------------------------------
+    # CRUD Operations
+    # ------------------------------------------------------------------
+
+    def list_all(self) -> list[PortfolioHolding]:
+        """Lista todos los holdings del portfolio."""
+        try:
+            with self._session_factory() as session:
+                rows = (
+                    session.query(PortfolioHoldingRow)
+                    .order_by(PortfolioHoldingRow.created_at.desc())
+                    .all()
+                )
+                return [self._row_to_holding(r) for r in rows]
+        except OperationalError as exc:
+            _logger.error("DB error listing holdings: %s", exc)
+            raise RepositoryError("No se pudieron leer los holdings") from exc
+
+    def get_by_id(self, holding_id: int) -> PortfolioHolding | None:
+        """Busca un holding por ID."""
+        try:
+            with self._session_factory() as session:
+                row = (
+                    session.query(PortfolioHoldingRow)
+                    .filter(PortfolioHoldingRow.id == holding_id)
+                    .first()
+                )
+                return self._row_to_holding(row) if row else None
+        except OperationalError as exc:
+            _logger.error("DB error getting holding %d: %s", holding_id, exc)
+            raise RepositoryError("No se pudo leer el holding") from exc
+
+    def create(
+        self,
+        coin_id: str,
+        symbol: str,
+        quantity: float,
+        purchase_price: float,
+    ) -> PortfolioHolding:
+        """Crea un nuevo holding."""
+        if quantity <= 0:
+            raise ValueError("Quantity must be positive")
+        if purchase_price < 0:
+            raise ValueError("Purchase price cannot be negative")
+
+        normalized_symbol = symbol.strip().lower()
+        normalized_coin_id = coin_id.strip().lower()
+
+        try:
+            with self._session_factory() as session:
+                row = PortfolioHoldingRow(
+                    coin_id=normalized_coin_id,
+                    symbol=normalized_symbol,
+                    quantity=quantity,
+                    purchase_price=purchase_price,
+                    created_at=datetime.now(timezone.utc),
+                )
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+                return self._row_to_holding(row)
+        except OperationalError as exc:
+            _logger.error("DB error creating holding: %s", exc)
+            raise RepositoryError("No se pudo crear el holding") from exc
+
+    def update(
+        self,
+        holding_id: int,
+        quantity: float | None = None,
+        purchase_price: float | None = None,
+    ) -> PortfolioHolding | None:
+        """Actualiza un holding existente."""
+        try:
+            with self._session_factory() as session:
+                row = (
+                    session.query(PortfolioHoldingRow)
+                    .filter(PortfolioHoldingRow.id == holding_id)
+                    .first()
+                )
+                if row is None:
+                    return None
+
+                if quantity is not None:
+                    if quantity <= 0:
+                        raise ValueError("Quantity must be positive")
+                    row.quantity = quantity
+                if purchase_price is not None:
+                    if purchase_price < 0:
+                        raise ValueError("Purchase price cannot be negative")
+                    row.purchase_price = purchase_price
+
+                row.updated_at = datetime.now(timezone.utc)
+                session.commit()
+                session.refresh(row)
+                return self._row_to_holding(row)
+        except OperationalError as exc:
+            _logger.error("DB error updating holding %d: %s", holding_id, exc)
+            raise RepositoryError("No se pudo actualizar el holding") from exc
+
+    def delete(self, holding_id: int) -> bool:
+        """Elimina un holding. Retorna True si existía."""
+        try:
+            with self._session_factory() as session:
+                row = (
+                    session.query(PortfolioHoldingRow)
+                    .filter(PortfolioHoldingRow.id == holding_id)
+                    .first()
+                )
+                if row is None:
+                    return False
+                session.delete(row)
+                session.commit()
+                return True
+        except OperationalError as exc:
+            _logger.error("DB error deleting holding %d: %s", holding_id, exc)
+            raise RepositoryError("No se pudo eliminar el holding") from exc
+
+    # ------------------------------------------------------------------
+    # Portfolio Summary (with current prices)
+    # ------------------------------------------------------------------
+
+    def get_summary(self, current_prices: dict[str, float]) -> dict:
+        """
+        Calcula el resumen del portfolio.
+
+        Args:
+            current_prices: dict {coin_id: current_price} desde CoinGecko o DB
+
+        Returns:
+            {total_value, total_cost, total_pnl, pnl_percent, holdings_count}
+        """
+        holdings = self.list_all()
+        if not holdings:
+            return {
+                "total_value": 0.0,
+                "total_cost": 0.0,
+                "total_pnl": 0.0,
+                "pnl_percent": 0.0,
+                "holdings_count": 0,
+            }
+
+        total_cost = 0.0
+        total_value = 0.0
+
+        for holding in holdings:
+            # Usar current_price del dict o fallback al purchase_price
+            current = current_prices.get(holding.coin_id, holding.purchase_price)
+
+            # Update holding con current_price para cálculo
+            holding.current_price = current
+
+            total_cost += holding.cost_basis
+            total_value += holding.current_value
+
+        total_pnl = total_value - total_cost
+        pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
+
+        return {
+            "total_value": round(total_value, 2),
+            "total_cost": round(total_cost, 2),
+            "total_pnl": round(total_pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "holdings_count": len(holdings),
+        }
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _row_to_holding(self, row: PortfolioHoldingRow) -> PortfolioHolding:
+        """Convierte una fila del DB a PortfolioHolding del dominio."""
+        return PortfolioHolding(
+            id=row.id,
+            coin_id=row.coin_id,
+            symbol=row.symbol,
+            quantity=row.quantity,
+            purchase_price=row.purchase_price,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )

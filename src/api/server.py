@@ -33,6 +33,7 @@ from src.core.exceptions import (
 from src.core.favorites import FavoritesManager
 from src.core.models import (
     CoinSearchResult,
+    PortfolioHolding,
 )
 from src.core.pipeline import (
     PriceSnapshotRow,
@@ -103,6 +104,49 @@ class HealthOut(BaseModel):
     version: str
     favorites_source: str
     price_source: str = "coingecko"  # "db" si el pipeline ya cargó datos
+
+
+class HoldingOut(BaseModel):
+    """Holding como lo ve el usuario."""
+
+    id: int
+    coin_id: str
+    symbol: str
+    quantity: float
+    purchase_price: float
+    current_price: float = 0.0
+    cost_basis: float
+    current_value: float
+    pnl: float
+    pnl_percent: float
+    created_at: str
+    updated_at: str | None = None
+
+
+class HoldingCreate(BaseModel):
+    """Datos para crear un holding."""
+
+    coin_id: str
+    symbol: str
+    quantity: float
+    purchase_price: float
+
+
+class HoldingUpdate(BaseModel):
+    """Datos para actualizar un holding."""
+
+    quantity: float | None = None
+    purchase_price: float | None = None
+
+
+class PortfolioSummaryOut(BaseModel):
+    """Resumen del portfolio."""
+
+    total_value: float
+    total_cost: float
+    total_pnl: float
+    pnl_percent: float
+    holdings_count: int
 
 
 class ErrorOut(BaseModel):
@@ -787,3 +831,168 @@ def health() -> HealthOut:
         favorites_source=_favorites_source,
         price_source=price_source,
     )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Holdings CRUD
+# ---------------------------------------------------------------------------
+
+
+def _holding_to_out(holding: PortfolioHolding) -> HoldingOut:
+    """Convierte un PortfolioHolding del dominio a HoldingOut para la API."""
+    return HoldingOut(
+        id=holding.id,
+        coin_id=holding.coin_id,
+        symbol=holding.symbol,
+        quantity=holding.quantity,
+        purchase_price=holding.purchase_price,
+        current_price=holding.current_price,
+        cost_basis=holding.cost_basis,
+        current_value=holding.current_value,
+        pnl=holding.pnl,
+        pnl_percent=holding.pnl_percent,
+        created_at=holding.created_at.isoformat(),
+        updated_at=holding.updated_at.isoformat() if holding.updated_at else None,
+    )
+
+
+@app.post(
+    "/api/holdings",
+    response_model=HoldingOut,
+    status_code=201,
+    summary="Crear holding",
+    description="Agrega una posición al portfolio.",
+)
+def create_holding(data: HoldingCreate) -> HoldingOut:
+    """Crea un nuevo holding en el portfolio."""
+    from src.adapters.database import PortfolioRepository
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita DATABASE_URL para usar el portfolio")
+
+    # Validar quantity y purchase_price
+    if data.quantity <= 0:
+        raise HTTPException(422, "Quantity debe ser mayor a 0")
+    if data.purchase_price < 0:
+        raise HTTPException(422, "Purchase price no puede ser negativo")
+
+    repo = PortfolioRepository(settings.database_url)
+    holding = repo.create(
+        coin_id=data.coin_id,
+        symbol=data.symbol,
+        quantity=data.quantity,
+        purchase_price=data.purchase_price,
+    )
+    return _holding_to_out(holding)
+
+
+@app.get(
+    "/api/holdings",
+    response_model=list[HoldingOut],
+    summary="Listar holdings",
+    description="Lista todas las posiciones del portfolio.",
+)
+def list_holdings() -> list[HoldingOut]:
+    """Lista todos los holdings del portfolio."""
+    from src.adapters.database import PortfolioRepository
+    from src.core.pipeline import get_latest_snapshots
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita DATABASE_URL para usar el portfolio")
+
+    repo = PortfolioRepository(settings.database_url)
+    holdings = repo.list_all()
+
+    # Obtener precios actuales para calcular P&L
+    coin_ids = [h.coin_id for h in holdings]
+    snapshots = get_latest_snapshots(coin_ids) if coin_ids else {}
+    current_prices: dict[str, float] = {s.coin_id: s.price for s in snapshots.values()}
+
+    # Actualizar cada holding con current_price y devolver
+    result: list[HoldingOut] = []
+    for h in holdings:
+        h.current_price = current_prices.get(h.coin_id, h.purchase_price)
+        result.append(_holding_to_out(h))
+
+    return result
+
+
+@app.put(
+    "/api/holdings/{holding_id}",
+    response_model=HoldingOut,
+    summary="Actualizar holding",
+    description="Actualiza quantity y/o purchase_price de un holding.",
+)
+def update_holding(holding_id: int, data: HoldingUpdate) -> HoldingOut:
+    """Actualiza un holding existente."""
+    from src.adapters.database import PortfolioRepository
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita DATABASE_URL para usar el portfolio")
+
+    # Validar
+    if data.quantity is not None and data.quantity <= 0:
+        raise HTTPException(422, "Quantity debe ser mayor a 0")
+    if data.purchase_price is not None and data.purchase_price < 0:
+        raise HTTPException(422, "Purchase price no puede ser negativo")
+
+    repo = PortfolioRepository(settings.database_url)
+    holding = repo.update(
+        holding_id=holding_id,
+        quantity=data.quantity,
+        purchase_price=data.purchase_price,
+    )
+    if holding is None:
+        raise HTTPException(404, "Holding no encontrado")
+
+    return _holding_to_out(holding)
+
+
+@app.delete(
+    "/api/holdings/{holding_id}",
+    status_code=204,
+    summary="Eliminar holding",
+    description="Elimina una posición del portfolio.",
+)
+def delete_holding(holding_id: int) -> None:
+    """Elimina un holding."""
+    from src.adapters.database import PortfolioRepository
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita DATABASE_URL para usar el portfolio")
+
+    repo = PortfolioRepository(settings.database_url)
+    deleted = repo.delete(holding_id)
+    if not deleted:
+        raise HTTPException(404, "Holding no encontrado")
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Summary
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/api/portfolio/summary",
+    response_model=PortfolioSummaryOut,
+    summary="Resumen del portfolio",
+    description="Muestra valor total, costo total, P&L total del portfolio.",
+)
+def portfolio_summary() -> PortfolioSummaryOut:
+    """Resumen agregado del portfolio."""
+    from src.adapters.database import PortfolioRepository
+    from src.core.pipeline import get_latest_snapshots
+
+    if not settings.database_url:
+        raise HTTPException(400, "Se necesita DATABASE_URL para usar el portfolio")
+
+    repo = PortfolioRepository(settings.database_url)
+
+    # Obtener precios actuales
+    holdings = repo.list_all()
+    coin_ids = [h.coin_id for h in holdings]
+    snapshots = get_latest_snapshots(coin_ids) if coin_ids else {}
+    current_prices: dict[str, float] = {s.coin_id: s.price for s in snapshots.values()}
+
+    summary = repo.get_summary(current_prices)
+    return PortfolioSummaryOut(**summary)

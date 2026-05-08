@@ -14,6 +14,7 @@ Cubre:
 
 from __future__ import annotations
 
+import pytest
 from datetime import datetime, timezone
 
 from src.core.exceptions import (
@@ -29,6 +30,7 @@ from src.core.models import (
     CoinSearchResult,
     Cryptocurrency,
     FavoriteCoin,
+    PortfolioHolding,
     PriceAlert,
     PriceData,
 )
@@ -299,3 +301,231 @@ class TestExceptions:
         assert issubclass(NetworkError, CryptoTrackerError)
         assert issubclass(ValidationError, CryptoTrackerError)
         assert issubclass(ConfigurationError, CryptoTrackerError)
+
+
+class TestPortfolioHolding:
+    """PortfolioHolding creation, P&L calculations, formatting."""
+
+    def test_create_minimal(self):
+        """Crea un holding con solo datos requeridos."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+        )
+        assert h.coin_id == "bitcoin"
+        assert h.symbol == "btc"
+        assert h.quantity == 1.0
+        assert h.purchase_price == 50000.0
+        assert h.current_price == 0.0  # default
+
+    def test_create_full(self):
+        """Crea un holding con todos los campos."""
+        now = datetime.now(timezone.utc)
+        h = PortfolioHolding(
+            id=1,
+            coin_id="ethereum",
+            symbol="eth",
+            quantity=10.0,
+            purchase_price=3000.0,
+            current_price=3500.0,
+            created_at=now,
+        )
+        assert h.id == 1
+        assert h.symbol == "eth"
+        assert h.current_price == 3500.0
+
+    def test_cost_basis(self):
+        """Calcula cost_basis = quantity * purchase_price."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=2.0,
+            purchase_price=50000.0,
+        )
+        assert h.cost_basis == 100000.0
+
+    def test_cost_basis_zero_quantity(self):
+        """Cost basis es 0 si quantity es 0."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=0.0,
+            purchase_price=50000.0,
+        )
+        assert h.cost_basis == 0.0
+
+    def test_current_value(self):
+        """Calcula current_value = quantity * current_price."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=2.0,
+            purchase_price=50000.0,
+            current_price=60000.0,
+        )
+        assert h.current_value == 120000.0
+
+    def test_current_value_uses_zero_when_not_set(self):
+        """current_value es 0 si current_price no está seteado."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=2.0,
+            purchase_price=50000.0,
+        )
+        assert h.current_value == 0.0
+
+    def test_pnl_positive(self):
+        """pnl positivo cuando el precio sube."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+            current_price=60000.0,
+        )
+        assert h.pnl == 10000.0
+
+    def test_pnl_negative(self):
+        """pnl negativo cuando el precio baja."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=60000.0,
+            current_price=50000.0,
+        )
+        assert h.pnl == -10000.0
+
+    def test_pnl_zero_when_no_change(self):
+        """pnl es 0 cuando no hay cambio de precio."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+            current_price=50000.0,
+        )
+        assert h.pnl == 0.0
+
+    def test_pnl_percent_positive(self):
+        """pnl_percent positivo con gain."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+            current_price=60000.0,
+        )
+        assert h.pnl_percent == 20.0
+
+    def test_pnl_percent_negative(self):
+        """pnl_percent negativo con loss."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=60000.0,
+            current_price=50000.0,
+        )
+        assert h.pnl_percent == pytest.approx(-16.67, rel=0.01)
+
+    def test_pnl_percent_zero_cost_basis(self):
+        """pnl_percent es 0 si cost_basis es 0."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=0.0,
+            purchase_price=0.0,
+            current_price=50000.0,
+        )
+        assert h.pnl_percent == 0.0
+
+    def test_cost_basis_formatted(self):
+        """Formatea cost basis con $ y comas."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=2.0,
+            purchase_price=50000.0,
+        )
+        assert h.cost_basis_formatted == "$100,000.00"
+
+    def test_current_value_formatted_high(self):
+        """Formatea value > 1 con 2 decimales."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=2.0,
+            purchase_price=50000.0,
+            current_price=65000.0,
+        )
+        assert h.current_value_formatted == "$130,000.00"
+
+    def test_current_value_formatted_low(self):
+        """Formatea value 0.01-1 con 4 decimales."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1000.0,
+            purchase_price=0.001,
+            current_price=0.0025,
+        )
+        assert h.current_value_formatted == "$2.50"
+
+    def test_current_value_formatted_very_low(self):
+        """Formatea value < 0.01 con 8 decimales."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1000.0,
+            purchase_price=0.0001,
+            current_price=0.00015,
+        )
+        assert h.current_value_formatted == "$0.1500"
+
+    def test_pnl_formatted_positive(self):
+        """Formatea P&L positivo con + y sign."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+            current_price=60000.0,
+        )
+        assert h.pnl_formatted == "+$10,000.00"
+
+    def test_pnl_formatted_negative(self):
+        """Formatea P&L negativo con -."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=60000.0,
+            current_price=50000.0,
+        )
+        assert h.pnl_formatted == "$-10,000.00"
+
+    def test_pnl_percent_formatted_positive(self):
+        """Formatea P&L% positivo con +."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=50000.0,
+            current_price=60000.0,
+        )
+        assert h.pnl_percent_formatted == "+20.00%"
+
+    def test_pnl_percent_formatted_negative(self):
+        """Formatea P&L% negativo."""
+        h = PortfolioHolding(
+            coin_id="bitcoin",
+            symbol="btc",
+            quantity=1.0,
+            purchase_price=60000.0,
+            current_price=50000.0,
+        )
+        assert h.pnl_percent_formatted == "-16.67%"

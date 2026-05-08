@@ -126,3 +126,75 @@ class PriceAlert:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     triggered_at: Optional[datetime] = None
+
+
+@dataclass
+class PortfolioHolding:
+    """
+    Represents a cryptocurrency holding in the user's portfolio.
+
+    Tracks the coin, quantity held, and purchase price for P&L calculations.
+    """
+
+    id: int = 0  # DB auto-increment primary key
+    coin_id: str = ""  # CoinGecko ID (e.g., "bitcoin")
+    symbol: str = ""  # Trading symbol (e.g., "btc")
+    quantity: float = 0.0  # Amount held
+    purchase_price: float = 0.0  # Price per unit when bought (USD)
+    current_price: float = 0.0  # Current market price (USD)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = None
+
+    @property
+    def cost_basis(self) -> float:
+        """Total cost of the holding (quantity * purchase_price)."""
+        return self.quantity * self.purchase_price
+
+    @property
+    def current_value(self) -> float:
+        """Current market value (quantity * current_price)."""
+        return self.quantity * self.current_price
+
+    @property
+    def pnl(self) -> float:
+        """Profit/Loss in USD (current_value - cost_basis)."""
+        return self.current_value - self.cost_basis
+
+    @property
+    def pnl_percent(self) -> float:
+        """Profit/Loss percentage."""
+        if self.cost_basis == 0:
+            return 0.0
+        return (self.pnl / self.cost_basis) * 100
+
+    @property
+    def cost_basis_formatted(self) -> str:
+        """Format cost basis with appropriate decimals."""
+        return f"${self.cost_basis:,.2f}"
+
+    @property
+    def current_value_formatted(self) -> str:
+        """Format current value with appropriate decimals."""
+        if self.current_value >= 1:
+            return f"${self.current_value:,.2f}"
+        elif self.current_value >= 0.01:
+            return f"${self.current_value:.4f}"
+        else:
+            return f"${self.current_value:.8f}"
+
+    @property
+    def pnl_formatted(self) -> str:
+        """Format P/L with sign."""
+        sign = "+" if self.pnl >= 0 else ""
+        if abs(self.pnl) >= 1:
+            return f"{sign}${self.pnl:,.2f}"
+        elif abs(self.pnl) >= 0.01:
+            return f"{sign}${self.pnl:.4f}"
+        else:
+            return f"{sign}${self.pnl:.8f}"
+
+    @property
+    def pnl_percent_formatted(self) -> str:
+        """Format P/L percentage with sign."""
+        sign = "+" if self.pnl_percent >= 0 else ""
+        return f"{sign}{self.pnl_percent:.2f}%"
