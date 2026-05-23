@@ -1,11 +1,11 @@
 name: Pipeline ETL
 
 on:
-  schedule:
-    # Cada 30 minutos — https://crontab.guru/#*/30_*_*_*_*
-    - cron: "*/30 * * * *"
+  # schedule:
+  #   Cada 30 minutos — https://crontab.guru/#*/30_*_*_*_*
+  #   - cron: "*/30 * * * *"
   workflow_dispatch:
-    # También se puede ejecutar manualmente desde la UI de GitHub
+    # Solo manual por ahora — desactivado hasta que revisemos bien el pipeline
 
 jobs:
   pipeline:
