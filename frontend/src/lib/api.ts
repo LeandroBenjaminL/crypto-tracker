@@ -106,6 +106,16 @@ const SYMBOL_TO_ID: Record<string, string> = {
 	jto: "jito-governance-token",
 };
 
+// Reverse map: CoinGecko ID → symbol
+const ID_TO_SYMBOL: Record<string, string> = {};
+for (const [sym, id] of Object.entries(SYMBOL_TO_ID)) {
+	ID_TO_SYMBOL[id] = sym;
+}
+
+// Cache de top coins: se fetchea 100 una vez, se reusa para todos los limites
+let _topCache: CoinResult[] | null = null;
+let _topCachePromise: Promise<CoinResult[]> | null = null;
+
 function _resolveId(query: string): string {
 	return SYMBOL_TO_ID[query.toLowerCase()] || query.toLowerCase();
 }
@@ -171,11 +181,11 @@ async function _cgPrices(ids: string[]): Promise<Map<string, CoinResult>> {
 	}
 }
 
-async function _cgTop(limit = 10): Promise<CoinResult[]> {
+async function _cgTop(): Promise<CoinResult[]> {
 	try {
 		const list = await _fetch<any[]>(
-			`${CG_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${limit}&page=1&sparkline=false`,
-			5000,
+			`${CG_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`,
+			8000,
 		);
 		return (list || []).map((c: any) => ({
 			id: c.id,
@@ -288,10 +298,24 @@ export async function getPrices(queries: string[]): Promise<CoinResult[]> {
 }
 
 export async function getTop(limit = 10): Promise<CoinResult[]> {
-	// 1) CoinGecko directo
-	const cg = await _cgTop(limit);
-	if (cg.length > 0) return cg;
-	// 2) Render API (fallback — datos de DB)
+	// Cache: si ya tenemos datos, filtrar por limite
+	if (_topCache) {
+		return _topCache.slice(0, limit);
+	}
+	// Evitar fetches paralelos duplicados
+	if (_topCachePromise) {
+		const all = await _topCachePromise;
+		return all.slice(0, limit);
+	}
+	// 1) CoinGecko (fetchea 100 y cachea)
+	_topCachePromise = _cgTop().then((coins) => {
+		_topCache = coins;
+		_topCachePromise = null;
+		return coins;
+	});
+	const cg = await _topCachePromise;
+	if (cg.length > 0) return cg.slice(0, limit);
+	// 2) Render API (fallback — sin cache)
 	try {
 		return await _fetch<CoinResult[]>(
 			`${RENDER_BASE}/api/top?limit=${limit}`,
@@ -321,13 +345,40 @@ export async function getHistory(
 }
 
 export async function searchCoins(query: string): Promise<CoinResult[]> {
-	// 1) CoinGecko search
-	const cg = await _cgSearch(query);
+	const q = query.toLowerCase().trim();
+	// 1) Local search contra SYMBOL_TO_ID
+	if (q.length >= 2) {
+		const local: CoinResult[] = [];
+		for (const [sym, id] of Object.entries(SYMBOL_TO_ID)) {
+			if (
+				sym.includes(q) ||
+				id.includes(q) ||
+				id.replace(/-/g, " ").includes(q)
+			) {
+				local.push({
+					id,
+					symbol: sym,
+					name: id.replace(/-/g, " ").replace(/\b\w/g, (c) =>
+						c.toUpperCase(),
+					),
+					rank: 0,
+					price: null,
+					change_24h: null,
+					volume_24h: null,
+					market_cap: null,
+					price_formatted: null,
+				});
+			}
+		}
+		if (local.length > 0) return local;
+	}
+	// 2) CoinGecko search
+	const cg = await _cgSearch(q);
 	if (cg.length > 0) return cg;
-	// 2) Render API (fallback)
+	// 3) Render API (fallback)
 	try {
 		return await _fetch<CoinResult[]>(
-			`${RENDER_BASE}/api/search/${encodeURIComponent(query)}`,
+			`${RENDER_BASE}/api/search/${encodeURIComponent(q)}`,
 			8000,
 		);
 	} catch {
