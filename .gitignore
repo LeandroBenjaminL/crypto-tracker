@@ -64,6 +64,7 @@ data/processed/
 
 # Project skills (local config)
 .pi/
+openspec/
 
 # Project specific
 .crypto_tracker.json  # Local favorites file
