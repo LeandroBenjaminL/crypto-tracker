@@ -59,5 +59,8 @@ data/processed/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# SDD artifacts (auto-generated)
+.atl/
+
 # Project specific
 .crypto_tracker.json  # Local favorites file
