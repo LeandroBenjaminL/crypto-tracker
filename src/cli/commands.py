@@ -87,10 +87,7 @@ def _print_result(result: CoinSearchResult) -> None:
     coin = result.coin
 
     # Header: name + symbol
-    click.echo(
-        click.style(f"\n{coin.name} ", bold=True)
-        + click.style(f"({coin.symbol.upper()})", dim=True)
-    )
+    click.echo(click.style(f"\n{coin.name} ", bold=True) + click.style(f"({coin.symbol.upper()})", dim=True))
 
     if result.has_price() and result.price_data:
         pd = result.price_data
@@ -104,20 +101,12 @@ def _print_result(result: CoinSearchResult) -> None:
         click.echo(click.style("  No price data available", fg="yellow"))
 
 
-def _print_table_row(
-    rank: int, name: str, symbol: str, price: float, change: float
-) -> None:
+def _print_table_row(rank: int, name: str, symbol: str, price: float, change: float) -> None:
     """Print a single row of the top-coins table."""
     name_col = click.style(f"{name:<16}", bold=True)
     symbol_col = click.style(f"{symbol.upper():>6}", dim=True)
     rank_col = click.style(f"#{rank:>3}", dim=True)
-    row = (
-        f"{rank_col}  "
-        f"{name_col} "
-        f"{symbol_col}  "
-        f"{_format_price(price):>12}  "
-        f"{_format_change(change)}"
-    )
+    row = f"{rank_col}  {name_col} {symbol_col}  {_format_price(price):>12}  {_format_change(change)}"
     click.echo(row)
 
 
@@ -482,9 +471,7 @@ def stats() -> None:
     click.echo(click.style("📊 Pipeline Stats", bold=True))
 
     if not settings.database_url:
-        click.echo(
-            click.style("\n[!] DATABASE_URL no está configurada.", fg="red")
-        )
+        click.echo(click.style("\n[!] DATABASE_URL no está configurada.", fg="red"))
         return
 
     s = get_pipeline_stats()
@@ -534,8 +521,7 @@ def _run_pipeline(top_n: int = 100) -> None:
         history = stats.get("history_updated", 0)
         click.echo(
             click.style(
-                f"\n✅ Pipeline completado: {snapshots} snapshots, "
-                f"{history} históricos actualizados",
+                f"\n✅ Pipeline completado: {snapshots} snapshots, {history} históricos actualizados",
                 fg="green",
             )
         )
@@ -558,6 +544,7 @@ def main() -> None:
 def run_telegram() -> None:
     """Entry point for the Telegram bot."""
     from src.telegram.bot import main as telegram_main
+
     telegram_main()
 
 

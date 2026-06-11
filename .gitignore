@@ -36,5 +36,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Node / frontend
+node_modules/
+
 # Project specific
 .crypto_tracker.json  # Local favorites file

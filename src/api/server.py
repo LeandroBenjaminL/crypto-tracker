@@ -222,6 +222,7 @@ async def lifespan(app: FastAPI) -> None:
     """Corre migraciones y precarga datos en background."""
     # 1. Migraciones de DB (si hay DATABASE_URL)
     from src.adapters.database import run_migrations
+
     try:
         run_migrations()
     except Exception as exc:
@@ -267,8 +268,10 @@ def _snapshot_to_coin_out(row: PriceSnapshotRow) -> CoinOut:
         volume_24h=row.volume_24h,
         market_cap=row.market_cap,
         price_formatted=(
-            f"${row.price:,.2f}" if row.price >= 1
-            else f"${row.price:.4f}" if row.price >= 0.01
+            f"${row.price:,.2f}"
+            if row.price >= 1
+            else f"${row.price:.4f}"
+            if row.price >= 0.01
             else f"${row.price:.8f}"
         ),
     )
@@ -390,9 +393,7 @@ app.add_middleware(
 
 
 @app.exception_handler(CryptoTrackerError)
-async def cryptotracker_exception_handler(
-    request: Any, exc: CryptoTrackerError
-) -> Any:
+async def cryptotracker_exception_handler(request: Any, exc: CryptoTrackerError) -> Any:
     """Cualquier error del dominio se traduce a HTTP con mensaje amigable."""
     raise _map_error(exc)
 
@@ -487,9 +488,7 @@ def get_top(limit: int = 10, currency: str = "usd") -> list[CoinOut]:
     description="Datos para graficar. Params: days (1,7,30,90,365,'max')."
     " Si el pipeline cacheó los datos, responde desde PostgreSQL.",
 )
-def get_history(
-    query: str, days: int = 7, currency: str = "usd"
-) -> list[dict[str, float]]:
+def get_history(query: str, days: int = 7, currency: str = "usd") -> list[dict[str, float]]:
     """
     Historial de precios para una moneda.
 
@@ -524,10 +523,7 @@ def get_history(
 def search_coins(query: str) -> list[CoinOut]:
     """Buscá monedas por nombre o símbolo."""
     coins = _service.search(query)
-    return [
-        CoinOut(id=c.id, symbol=c.symbol, name=c.name, rank=c.rank)
-        for c in coins
-    ]
+    return [CoinOut(id=c.id, symbol=c.symbol, name=c.name, rank=c.rank) for c in coins]
 
 
 # ---------------------------------------------------------------------------
@@ -813,11 +809,10 @@ def health() -> HealthOut:
     if settings.database_url:
         try:
             from sqlalchemy import create_engine, text
+
             engine = create_engine(settings.database_url, pool_pre_ping=True)
             with engine.connect() as conn:
-                result = conn.execute(
-                    text("SELECT COUNT(*) FROM price_snapshots")
-                )
+                result = conn.execute(text("SELECT COUNT(*) FROM price_snapshots"))
                 count = result.scalar()
                 if count and count > 0:
                     price_source = "db"
