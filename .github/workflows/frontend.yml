@@ -1,9 +1,12 @@
 name: Deploy Frontend to GitHub Pages
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
   workflow_dispatch:
-    # Desactivado hasta que se habilite GitHub Pages en el repo.
-    # Para activar: ir a Settings > Pages > Source: GitHub Actions
 
 # Allow one concurrent deployment
 concurrency:
@@ -48,6 +51,7 @@ jobs:
 
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Deploy to GitHub Pages
