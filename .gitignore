@@ -62,5 +62,8 @@ data/processed/
 # SDD artifacts (auto-generated)
 .atl/
 
+# Project skills (local config)
+.pi/
+
 # Project specific
 .crypto_tracker.json  # Local favorites file
