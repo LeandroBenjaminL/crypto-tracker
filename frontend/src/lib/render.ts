@@ -70,7 +70,7 @@ export function renderCoinsTable(
 		.join("");
 
 	const headerCells = `
-		${showRank ? '<th>#</th>' : ""}
+		${showRank ? "<th>#</th>" : ""}
 		<th>Nombre</th>
 		<th>Precio</th>
 		<th>24h</th>
@@ -82,7 +82,7 @@ export function renderCoinsTable(
 		viewAllLink || caption
 			? `
 		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem">
-			${caption ? `<h3 style="font-size: 0.9rem; opacity: 0.7">${caption}</h3>` : '<span></span>'}
+			${caption ? `<h3 style="font-size: 0.9rem; opacity: 0.7">${caption}</h3>` : "<span></span>"}
 			${
 				viewAllLink
 					? `<a href="${viewAllLink}" class="btn" style="font-size: 0.8rem">Ver todas →</a>`
