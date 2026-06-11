@@ -163,7 +163,7 @@ class ErrorOut(BaseModel):
 # La API cachea 120s para que Streamlit no tenga que repreguntar tan seguido
 _client = CoinGeckoClient(api_key=settings.coingecko_api_key, cache_ttl=120.0)
 _service = PriceService(api_client=_client)
-_VERSION = "0.2.0"
+_VERSION = "0.3.0"
 
 # ---------------------------------------------------------------------------
 # Precargar datos populares al arrancar (mínimo — el pipeline hace el resto)

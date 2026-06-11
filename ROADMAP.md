@@ -248,10 +248,9 @@ This roadmap tracks the development phases of the Crypto Tracker project. Each p
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.4.0 | 2026-05-05 | API + DB tests, ARCHITECTURE.md sync, full test coverage |
-| 0.3.0 | 2026-05-05 | FastAPI REST layer, PostgreSQL, Docker Compose |
-| 0.2.0 | 2026-05-05 | Dashboard: charts, favorites, CSV export, caching, resilience |
-| 0.1.0 | 2026-05-04 | CLI complete: price, list, search commands + Streamlit dashboard |
+| 0.3.0 | 2026-06-11 | Pipeline ETL, price cache en PostgreSQL, price alerts, portfolio, Telegram bot |
+| 0.2.0 | 2026-05-05 | FastAPI REST layer, PostgreSQL, Docker Compose, Streamlit dashboard |
+| 0.1.0 | 2026-05-04 | CLI complete: price, list, search commands |
 | 0.0.1 | 2026-04-10 | Project structure + core models |
 
 ---
