@@ -1,49 +1,54 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import CoinsTable from "../components/CoinsTable.astro";
 ---
 
 <BaseLayout title="Crypto Tracker — Precios de Criptomonedas" description="Dashboard de precios de criptomonedas en vivo">
-  <!-- Hero -->
-  <div class="container" style="padding-top: 2.5rem; padding-bottom: 1rem">
-    <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.5px">
-      Crypto Tracker
-    </h1>
-    <p class="text-secondary" style="margin-top: 0.3rem; font-size: 1.05rem">
-      Precios en vivo de las principales criptomonedas
-    </p>
-  </div>
+  <!-- ═══ Hero ═══ -->
+  <section class="hero-section">
+    <!-- Star field (JS genera posiciones random) -->
+    <div id="star-field" aria-hidden="true"></div>
 
-  <!-- Hero cards: BTC, ETH, SOL -->
-  <div
-    class="container"
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem"
-  >
-    <div class="card" style="padding: 1.25rem">
-      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
-        Bitcoin
-      </div>
-      <div id="hero-btc" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
-      <div id="hero-btc-change" style="font-size: 0.85rem; color: var(--green)">—</div>
-    </div>
-    <div class="card" style="padding: 1.25rem">
-      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
-        Ethereum
-      </div>
-      <div id="hero-eth" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
-      <div id="hero-eth-change" style="font-size: 0.85rem; color: var(--green)">—</div>
-    </div>
-    <div class="card" style="padding: 1.25rem">
-      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
-        Solana
-      </div>
-      <div id="hero-sol" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
-      <div id="hero-sol-change" style="font-size: 0.85rem; color: var(--green)">—</div>
-    </div>
-  </div>
+    <div class="container" style="padding: 3rem 0 1.5rem; position: relative; z-index: 1">
+      <!-- Eyebrow -->
+      <p class="fade-in-up" style="font-family: var(--font-display); font-size: 0.7rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.4rem">
+        Precios en vivo
+      </p>
 
-  <!-- Top 10 table (pre-rendered placeholder, JS rellena) -->
-  <div class="container" style="margin-bottom: 2rem">
+      <!-- Title con gradient -->
+      <h1 class="fade-in-up" style="font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; line-height: 1.1; background: linear-gradient(135deg, var(--text) 40%, var(--accent)); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent">
+        Crypto Tracker
+      </h1>
+
+      <p class="fade-in-up text-secondary" style="margin-top: 0.5rem; font-size: 1.05rem; max-width: 36rem">
+        Seguí las principales criptomonedas con datos en vivo de CoinGecko
+      </p>
+    </div>
+
+    <!-- Hero cards: BTC, ETH, SOL -->
+    <div
+      class="container fade-in-up"
+      style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding-bottom: 2rem; position: relative; z-index: 1"
+    >
+      <div class="card hero-card" style="padding: 1.5rem" data-coin="btc">
+        <div style="font-family: var(--font-display); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.2em; opacity: 0.5; margin-bottom: 0.5rem">Bitcoin</div>
+        <div class="count-value" id="hero-btc" style="font-size: 1.6rem">—</div>
+        <div id="hero-btc-change" style="font-size: 0.8rem; margin-top: 0.15rem">—</div>
+      </div>
+      <div class="card hero-card" style="padding: 1.5rem" data-coin="eth">
+        <div style="font-family: var(--font-display); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.2em; opacity: 0.5; margin-bottom: 0.5rem">Ethereum</div>
+        <div class="count-value" id="hero-eth" style="font-size: 1.6rem">—</div>
+        <div id="hero-eth-change" style="font-size: 0.8rem; margin-top: 0.15rem">—</div>
+      </div>
+      <div class="card hero-card" style="padding: 1.5rem" data-coin="sol">
+        <div style="font-family: var(--font-display); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.2em; opacity: 0.5; margin-bottom: 0.5rem">Solana</div>
+        <div class="count-value" id="hero-sol" style="font-size: 1.6rem">—</div>
+        <div id="hero-sol-change" style="font-size: 0.8rem; margin-top: 0.15rem">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Top 10 table ═══ -->
+  <div class="container fade-in-up" style="margin-bottom: 2rem">
     <div id="top10-container">
       <div class="spinner"></div>
     </div>
@@ -51,14 +56,55 @@ import CoinsTable from "../components/CoinsTable.astro";
 </BaseLayout>
 
 <script>
-  import { getPrices, getTop, fmtPrice, fmtChange } from "../lib/api";
+  import { getPrices, getTop } from "../lib/api";
   import { renderCoinsTable } from "../lib/render";
 
+  // ── Star field ──
+  (function createStars() {
+    const container = document.getElementById("star-field");
+    if (!container) return;
+    const count = 50;
+    for (let i = 0; i < count; i++) {
+      const star = document.createElement("span");
+      star.className = "hero-star";
+      const seed = (i + 1) * 17.3;
+      star.style.left = `${((Math.sin(seed) + 1) / 2) * 96 + 2}%`;
+      star.style.top = `${((Math.cos(seed * 0.73) + 1) / 2) * 20 + 2}%`;
+      const size = (Math.sin(seed * 1.7) + 1) / 2 > 0.6 ? 2 : 1;
+      star.style.width = `${size}px`;
+      star.style.height = `${size}px`;
+      star.style.setProperty("--star-duration", `${2 + ((Math.cos(seed * 1.31) + 1) / 2) * 3}s`);
+      star.style.setProperty("--star-delay", `${((Math.sin(seed * 2.1) + 1) / 2) * 2.5}s`);
+      container.appendChild(star);
+    }
+  })();
+
+  // ── Scroll reveal (fade-in-up) ──
+  (function setupScrollReveal() {
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("visible");
+              observer.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.15 }
+      );
+      document.querySelectorAll(".fade-in-up").forEach((el) => observer.observe(el));
+    } else {
+      // Fallback: show everything
+      document.querySelectorAll(".fade-in-up").forEach((el) => el.classList.add("visible"));
+    }
+  })();
+
+  // ── Hero price loader ──
   async function loadHero() {
     try {
       const coins = await getPrices(["btc", "eth", "sol"]);
-      const ids = ["btc", "eth", "sol"];
-      for (const id of ids) {
+      for (const id of ["btc", "eth", "sol"]) {
         const coin = coins.find(
           (c) => c.symbol.toLowerCase() === id || c.id?.toLowerCase() === id
         );
@@ -67,25 +113,33 @@ import CoinsTable from "../components/CoinsTable.astro";
         if (!priceEl || !changeEl) continue;
         if (coin?.price != null) {
           const isUp = (coin.change_24h ?? 0) >= 0;
-          priceEl.textContent = fmtPrice(coin.price);
+          const formatter = new Intl.NumberFormat("en-US", {
+            style: "currency", currency: "USD",
+            minimumFractionDigits: coin.price >= 1 ? 2 : 4,
+            maximumFractionDigits: coin.price >= 1 ? 2 : 8,
+          });
+          priceEl.textContent = formatter.format(coin.price);
           priceEl.style.color = isUp ? "var(--green)" : "var(--red)";
-          changeEl.textContent = `${isUp ? "▲" : "▼"} ${fmtChange(coin.change_24h ?? 0)}`;
+          const changeFormatted =
+            (coin.change_24h ?? 0) > 0
+              ? `+${coin.change_24h.toFixed(2)}%`
+              : `${(coin.change_24h ?? 0).toFixed(2)}%`;
+          changeEl.textContent = `${isUp ? "▲" : "▼"} ${changeFormatted}`;
           changeEl.style.color = isUp ? "var(--green)" : "var(--red)";
         }
       }
-    } catch {
-      // Silently fail — keep showing "—"
-    }
+    } catch { /* keep "—" */ }
   }
 
+  // ── Top 10 loader ──
   async function loadTop10() {
     const container = document.getElementById("top10-container");
     if (!container) return;
     try {
       const coins = await getTop(10);
       container.innerHTML = renderCoinsTable(coins, {
-        caption: 'Top 10 Criptomonedas',
-        viewAllLink: '/crypto-tracker/top',
+        caption: "Top 10 Criptomonedas",
+        viewAllLink: "/crypto-tracker/top",
       });
     } catch {
       container.innerHTML = `<p class="text-muted">Error al cargar datos.</p>`;
@@ -95,7 +149,6 @@ import CoinsTable from "../components/CoinsTable.astro";
   loadHero();
   loadTop10();
 
-  // Auto-refresh cada 60s
   setInterval(() => {
     loadHero();
     loadTop10();
