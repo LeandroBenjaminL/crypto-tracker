@@ -3,9 +3,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-312%20cases-green.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-488%20cases-green.svg)](./tests)
 [![CI](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/test.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
-[![Deploy](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/pipeline.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
+[![ETL](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/pipeline-etl.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
 [![Frontend](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/frontend.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
 [![Pages](https://img.shields.io/badge/frontend-github.io-blueviolet.svg)](https://leandrobenjaminl.github.io/crypto-tracker/)
 
@@ -38,7 +38,7 @@ http://localhost:8000/api/health   → {"status": "ok", "price_source": "db"}
 | **💻 CLI** | Precio de monedas, top por market cap, búsqueda, pipeline ETL, Telegram bot |
 | **🤖 Telegram** | Bot con `/price`, `/top`, `/alert`, `/help` — autorización por lista blanca |
 | **📊 Dashboard (Streamlit)** | Streamlit con gráficos interactivos, favoritos, CSV export, portfolio |
-| **🌐 Frontend (Astro)** | SPA estática con GitHub Pages — precios, top, búsqueda, favoritos, 404 |
+| **🌐 Frontend (Astro)** | SPA estática con GitHub Pages — precios, top, búsqueda, favoritos, count-up animations, stagger scroll-reveal, 404 |
 | **🌐 API REST** | FastAPI con Swagger docs, health check, cache en PostgreSQL |
 | **🗄️ Pipeline ETL** | Cada 30min extrae top 100 de CoinGecko, alertas de precio, histórico |
 | **💼 Portfolio** | Tracking de holdings con P&L, cost basis, valor actual |
@@ -178,7 +178,7 @@ El pipeline se ejecuta automáticamente:
 
 | Frecuencia | Qué hace | Cómo |
 |------------|----------|------|
-| **Cada 30 min** | Snapshots de precios (top 100) | GitHub Actions (manual dispatch) |
+| **Cada 30 min** | Snapshots de precios (top 100) | GitHub Actions (schedule + manual dispatch) |
 | **Cada 6h** | Histórico (7d, 30d, 90d) para top 20 | Pipeline + CoinGecko |
 | **Al arrancar** | Migraciones Alembic | `run_migrations()` |
 | **Post-pipeline** | Check de alertas de precio | `check_alerts()` |
@@ -205,20 +205,28 @@ pytest -v -k "error or edge or not_found or empty or unknown"
 # Con coverage
 pytest --cov=src --cov-report=term
 
-# 312 tests — 9 test files
+# 488 tests — 17 test files
 ```
 
 | Suite | Archivo | Tests | Qué cubre |
 |-------|---------|-------|-----------|
-| Models | `test_models.py` | ~50 | Creación, igualdad, formateo, excepciones |
-| Price Service | `test_price_service.py` | ~30 | Lógica de negocio, resolución de símbolos |
-| CoinGecko Client | `test_api_client.py` | ~18 | HTTP mocks, rate limit, errores, cache |
-| API Server | `test_api_server.py` | ~50 | FastAPI TestClient, endpoints, errores |
-| HTTP Client | `test_api_client_http.py` | ~44 | Cliente HTTP mocks |
-| CLI | `test_cli.py` | ~17 | Click CliRunner, argumentos |
-| Favorites (JSON) | `test_favorites.py` | ~16 | CRUD JSON, persistencia |
-| DB Repository | `test_database.py` | ~14 | SQLAlchemy FavoritesRepository |
+| Models | `test_models.py` | 66 | Creación, igualdad, formateo, P&L, excepciones |
+| Price Service | `test_price_service.py` | 23 | Lógica de negocio, resolución de símbolos |
+| CoinGecko Client | `test_api_client.py` | 18 | HTTP mocks, rate limit, errores, cache |
+| API Server | `test_api_server.py` | 61 | FastAPI TestClient, endpoints, errores |
+| HTTP Client | `test_api_client_http.py` | 42 | Cliente HTTP mocks |
+| CLI | `test_cli.py` | 17 | Click CliRunner, argumentos |
+| CLI Commands | `test_commands.py` | 34 | Alertas, pipeline, formatos, errores CLI |
+| Favorites (JSON) | `test_favorites.py` | 25 | CRUD JSON, persistencia, edge cases |
+| DB Repository | `test_database.py` | 15 | SQLAlchemy FavoritesRepository |
 | Portfolio | `test_portfolio_repository.py` | 37 | CRUD + P&L summary |
+| Pipeline ETL | `test_pipeline.py` | 44 | Run, alertas, histórico, snapshots |
+| Settings | `test_settings.py` | 20 | Config, env vars, defaults, errores |
+| Telegram Bot | `test_bot.py` | 11 | Comandos, autorización, inicio |
+| Exceptions | `test_exceptions.py` | 31 | Jerarquía de errores, mensajes |
+| API Cache | `test_api_cache.py` | 10 | TTL, fetch, cache management |
+| Formatters | `test_formatters.py` | 21 | fmtPrice, fmtChange, fmtCap, colores |
+| Navigation | `test_navigation.py` | 8 | Páginas, sidebar, opciones |
 
 ### CI/CD
 
@@ -226,9 +234,10 @@ pytest --cov=src --cov-report=term
 |-------|-------------|--------|
 | Ruff | Formato e imports | ✅ |
 | Mypy | Tipado estático (25 archivos) | ✅ |
-| Pytest | Tests (3 versiones de Python) | ✅ (312 passed, 1 skipped) |
+| Pytest | Tests (3 versiones de Python) | ✅ (488 passed) |
 | Astro Build | Build del frontend | ✅ |
-| Pipeline ETL | Cron manual | ✅ |
+| Frontend Tests | Placeholder npm test | ✅ |
+| Pipeline ETL | Cron cada 30min | ✅ |
 | GitHub Pages | Deploy automático | ✅ |
 
 ---
@@ -268,13 +277,13 @@ Ver [ROADMAP.md](ROADMAP.md) para el plan completo.
 ### Completado ✅
 
 - CLI + Telegram + Streamlit + API REST
-- Frontend Astro con GitHub Pages
-- Pipeline ETL con PostgreSQL + alertas de precio
+- Frontend Astro con GitHub Pages (count-up animations, scroll-reveal)
+- Pipeline ETL con PostgreSQL + alertas de precio (cada 30min)
 - Portfolio tracking con P&L
 - Cache inteligente (DB first, CoinGecko fallback)
 - Migraciones automáticas (Alembic, 5 migrations)
 - Deploy a Render + GitHub Actions + GitHub Pages
-- CI verde (ruff, mypy, 312 tests)
+- CI verde (ruff, mypy, 488 tests)
 
 ### Próximo 🔜
 
