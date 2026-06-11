@@ -10,8 +10,11 @@
 4. [Flujo de datos](#flujo-de-datos)
 5. [Decisiones clave](#decisiones-clave)
 6. [Testing](#testing)
-7. [Triple UI: CLI + Streamlit + API](#triple-ui-cli--streamlit--api)
-8. [Docker y deployment](#docker-y-deployment)
+7. [Triple UI: CLI + API + Streamlit](#triple-ui-cli--api--streamlit)
+8. [Frontend Astro](#frontend-astro)
+9. [Telegram Bot](#telegram-bot)
+10. [Portfolio y Alertas](#portfolio-y-alertas)
+11. [Docker y deployment](#docker-y-deployment)
 
 ---
 
@@ -23,12 +26,12 @@ Crypto Tracker sigue una **arquitectura limpia (Clean Architecture)** con separa
 |------|-----------------|---------------|
 | **CLI** | Recibir input del usuario, mostrar output | Solo conoce `core` |
 | **API (FastAPI)** | Exponer lógica como REST endpoints | Conoce `core` y `adapters/database` |
-| **Streamlit** | Dashboard web interactivo | **Consume la API vía HTTP** — no importa `core` directo |
+| **Telegram Bot** | Interfaz conversacional | Solo conoce `core` y `adapters` |
+| **Streamlit** | Dashboard web interactivo | **Consume la API vía HTTP** |
+| **Frontend Astro** | SPA estática en GitHub Pages | **Consume la API vía HTTP** |
 | **Core** | Reglas de negocio, modelos de dominio | Sin dependencias externas |
 | **Adapters** | Integrar con APIs externas y DB | Solo implementa lo que `core` espera |
 | **Config** | Leer variables de entorno y settings | Utilitario, usado por todos |
-
-La regla de oro: **el `core` no sabe de HTTP, ni de terminal, ni de web**. Es Python puro.
 
 La regla de oro: **el `core` no sabe de HTTP, ni de terminal, ni de web**. Es Python puro.
 
@@ -44,47 +47,69 @@ crypto-tracker/
 │   │   ├── models.py          # Entidades de dominio
 │   │   ├── exceptions.py      # Jerarquía de excepciones
 │   │   ├── price_service.py   # Lógica de negocio
-│   │   ├── pipeline.py        # 🆕 ETL: CoinGecko → PostgreSQL
-│   │   └── favorites.py       # Persistencia local de favoritos
+│   │   ├── pipeline.py        # ETL: CoinGecko → PostgreSQL + alertas
+│   │   └── favorites.py       # Persistencia local de favoritos (JSON)
 │   ├── adapters/
 │   │   ├── __init__.py
 │   │   ├── api_client.py      # Cliente HTTP de CoinGecko
-│   │   └── database.py        # SQLAlchemy: 3 tablas + migraciones
+│   │   └── database.py        # SQLAlchemy: 6 tablas + migraciones
 │   ├── api/                   # Capa REST
 │   │   ├── __init__.py
-│   │   ├── server.py           # FastAPI — 10 endpoints + OpenAPI docs
+│   │   ├── server.py           # FastAPI — 14 endpoints + OpenAPI docs
 │   │   └── client.py           # Cliente HTTP para consumir la API
 │   ├── cli/
 │   │   ├── __init__.py
-│   │   └── commands.py        # Click: price, list, search, pipeline
+│   │   └── commands.py        # Click: price, list, search, pipeline, telegram
+│   ├── telegram/
+│   │   ├── __init__.py
+│   │   └── bot.py             # Bot de Telegram con python-telegram-bot
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── api_cache.py       # Cache para llamadas a la API
+│   │   ├── formatters.py      # Formateo de precios y monedas
+│   │   ├── navigation.py      # Navegación del dashboard
+│   │   └── theme.py           # Tema y CSS del dashboard
 │   └── config/
 │       ├── __init__.py
 │       └── settings.py        # Configuración desde env
-├── migrations/              # 🆕 Alembic migrations (3)
+├── frontend/                  # Astro 6 — SPA estática
+│   └── src/
+│       ├── components/        # CoinsTable, PriceCard, ThemeToggle
+│       ├── layouts/           # BaseLayout (Header + footer + theme)
+│       ├── lib/               # api.ts, render.ts
+│       ├── pages/             # index, price/[slug], top, search, favorites, 404
+│       └── styles/            # global.css
+├── migrations/              # Alembic migrations (5)
 │   ├── versions/
 │   │   ├── 0001_create_favorites_table.py
 │   │   ├── 0002_create_price_snapshots_table.py
-│   │   └── 0003_create_price_history_table.py
+│   │   ├── 0003_create_price_history_table.py
+│   │   ├── 0004_create_pipeline_runs_table.py
+│   │   └── 0005_create_price_alerts_table.py
 │   ├── env.py
 │   ├── script.py.mako
 │   └── alembic.ini
 ├── tests/
-│   ├── test_models.py              # 50 tests — modelos de dominio
-│   ├── test_price_service.py       # 30 tests — lógica de negocio
-│   ├── test_api_client.py          # 18 tests — CoinGecko HTTP mocks
-│   ├── test_cli.py                 # 17 tests — CLI con CliRunner
-│   ├── test_favorites.py           # 16 tests — persistencia JSON
-│   ├── test_database.py            # 14 tests — SQLAlchemy + SQLite
-│   ├── test_api_server.py          # FastAPI con TestClient
-│   └── test_api_client_http.py     # HTTP client contra la API
+│   ├── test_models.py              # ~50 tests — modelos de dominio
+│   ├── test_price_service.py       # ~30 tests — lógica de negocio
+│   ├── test_api_client.py          # ~18 tests — CoinGecko HTTP mocks
+│   ├── test_cli.py                 # ~17 tests — CLI con CliRunner
+│   ├── test_favorites.py           # ~16 tests — persistencia JSON
+│   ├── test_database.py            # ~14 tests — SQLAlchemy FavoritesRepository
+│   ├── test_api_server.py          # ~50 tests — FastAPI con TestClient
+│   ├── test_api_client_http.py     # ~44 tests — HTTP client mocks
+│   └── test_portfolio_repository.py # 37 tests — PortfolioRepository CRUD + P&L
 ├── app.py                     # Dashboard Streamlit
-├── Dockerfile                 # 3 entrypoints: api | streamlit | pipeline
+├── run.py                     # Launcher local (API + Streamlit)
+├── Dockerfile                 # 4 entrypoints: api | streamlit | pipeline | telegram
 ├── docker-compose.yml         # 3 servicios: API + Streamlit + PostgreSQL
 ├── pyproject.toml
-├── alembic.ini                # 🆕 Configuración de migraciones
+├── alembic.ini
+├── Makefile                   # Comandos de desarrollo
 └── .github/workflows/
     ├── test.yml               # CI: Ruff + mypy + pytest
-    └── pipeline.yml           # 🆕 Pipeline ETL cada 30 min
+    ├── pipeline.yml           # Pipeline ETL (manual dispatch)
+    └── frontend.yml           # Deploy frontend Astro a GitHub Pages
 ```
 
 ---
@@ -93,9 +118,9 @@ crypto-tracker/
 
 ### 1. Core — El dominio
 
-**Archivos:** `src/core/models.py`, `src/core/exceptions.py`, `src/core/price_service.py`, `src/core/favorites.py`
+**Archivos:** `src/core/models.py`, `src/core/exceptions.py`, `src/core/price_service.py`, `src/core/favorites.py`, `src/core/pipeline.py`
 
-Esta capa contiene todo lo que el negocio "sabe" sobre criptomonedas, precios y favoritos. No importa `requests`, `click`, ni `streamlit`.
+Esta capa contiene todo lo que el negocio "sabe" sobre criptomonedas, precios, favoritos, pipeline ETL y alertas. No importa `requests`, `click`, `telegram`, ni `streamlit`.
 
 #### Modelos (`models.py`)
 
@@ -120,6 +145,24 @@ class PriceData:
 class CoinSearchResult:
     coin: Cryptocurrency
     price_data: Optional[PriceData] = None
+
+@dataclass
+class PortfolioHolding:
+    id: int
+    coin_id: str
+    symbol: str
+    quantity: float
+    purchase_price: float
+    current_price: float = 0.0
+    created_at: datetime = ...
+    updated_at: Optional[datetime] = None
+
+    @property
+    def cost_basis(self) -> float: ...
+    @property
+    def current_value(self) -> float: ...
+    @property
+    def pnl(self) -> float: ...
 ```
 
 Son **value objects**: inmutables, sin identidad más allá de sus datos. `Cryptocurrency` se compara por `id`, no por instancia.
@@ -139,7 +182,7 @@ CryptoTrackerError (base)
 └── CacheError
 ```
 
-Cada capa superior (CLI, Streamlit) mapea estas excepciones a mensajes amigables para el usuario.
+Cada capa superior (CLI, Telegram, API, Streamlit) mapea estas excepciones a mensajes amigables.
 
 #### PriceService (`price_service.py`)
 
@@ -165,7 +208,7 @@ Usamos **structural typing** (duck typing) en vez de herencia: cualquier objeto 
 
 #### Resolución de símbolos
 
-El servicio mantiene un mapa local `SYMBOL_TO_ID` con 50+ monedas populares (btc → bitcoin, eth → ethereum, etc.). Esto permite:
+El servicio mantiene un mapa local `SYMBOL_TO_ID` con 50+ monedas populares. Esto permite:
 
 1. **Resolución rápida** sin llamada a la API.
 2. **Fallback a búsqueda API** si el símbolo no está en el mapa.
@@ -176,14 +219,16 @@ def _resolve_to_id(self, query: str) -> str:
     # 1. Mapa local
     resolved = _try_resolve_id(normalized)
     if resolved: return resolved
-
     # 2. Búsqueda API
     results = self._client.search_coin(normalized)
     if results: return results[0]["id"]
-
     # 3. Usar tal cual (la API dirá si es válido)
     return normalized
 ```
+
+#### Pipeline ETL (`pipeline.py`)
+
+El pipeline es un **ETL** (Extract, Transform, Load) que mantiene la base de datos actualizada. Ver sección [Pipeline ETL](#pipeline-etl) más abajo.
 
 #### Favorites (`favorites.py`)
 
@@ -196,66 +241,26 @@ Persistencia de favoritos con **dos backends intercambiables**:
 
 Ambos implementan la misma interfaz pública. El server elige uno al arrancar con **graceful degradation**: si hay `DATABASE_URL` pero la DB no responde, cae silenciosamente a JSON y loguea un warning.
 
-```python
-if settings.database_url:
-    try:
-        _favorites = FavoritesRepository(settings.database_url)
-    except Exception:
-        _favorites = FavoritesManager()  # fallback
-else:
-    _favorites = FavoritesManager()
-```
-
-#### JSON file (`FavoritesManager`)
-
-Persistencia simple en el home del usuario (`~/.crypto_tracker.json`). Intencionalmente minimalista: no necesitamos una base de datos para una lista de símbolos.
-
-```python
-class FavoritesManager:
-    def add(self, symbol: str) -> None      # idempotente (sin duplicados)
-    def remove(self, symbol: str) -> None
-    def list_all(self) -> list[FavoriteCoin]
-    def is_favorite(self, symbol: str) -> bool
-```
-
-#### PostgreSQL (`FavoritesRepository`)
-
-Cuando hay `DATABASE_URL` configurada, reemplaza al JSON file. Usa SQLAlchemy 2.0 con el pattern **Repository**:
-
-```python
-class FavoritesRepository:
-    def list_all(self) -> list[FavoriteCoin]
-    def add(self, symbol: str) -> None       # idempotente (IntegrityError → silencioso)
-    def remove(self, symbol: str) -> None
-    def is_favorite(self, symbol: str) -> bool
-```
-
-La tabla `favorites` tiene dos columnas: `symbol` (PK) y `added_at` (timestamptz).
-Se crea automáticamente con `Base.metadata.create_all()` al iniciar el repositorio — no requiere migraciones manuales (aunque para producción recomendamos Alembic).
-
 ---
 
 ### 2. Adapters — Integraciones externas
 
 **Archivos:** `src/adapters/api_client.py`, `src/adapters/database.py`
 
-Los adapters son la **única** parte del código que sabe de HTTP y bases de datos. Si CoinGecko cambia su API o migramos de PostgreSQL a otra DB, solo se modifican estos archivos.
+Los adapters son la **única** parte del código que sabe de HTTP y bases de datos.
 
 #### CoinGeckoClient (`api_client.py`)
-
-#### CoinGeckoClient
 
 ```python
 class CoinGeckoClient:
     BASE_URL = "https://api.coingecko.com/api/v3"
-
     def get_price(self, coin_ids, currency): ...
     def get_top_coins(self, limit, currency): ...
     def search_coin(self, query): ...
     def get_coin_history(self, coin_id, days, currency): ...
 ```
 
-#### Resiliencia incorporada
+**Resiliencia incorporada:**
 
 | Mecanismo | Implementación | Por qué |
 |-----------|----------------|---------|
@@ -264,33 +269,25 @@ class CoinGeckoClient:
 | **TTL Cache** | `TTLCache` con 30s de vida y max 128 entries | No golpear la API por los mismos datos |
 | **Timeout** | 10s en todas las requests | No quedar colgado |
 
-#### Manejo de 429 (Rate Limit)
-
-```python
-if response.status_code == 429:
-    retry_after = response.headers.get("Retry-After")
-    raise RateLimitError(retry_after=int(retry_after) if retry_after else None)
-```
-
-El CLI y el dashboard traducen esto a: *"Límite de API alcanzado. Esperá X segundos o usá una API key gratuita."*
-
 #### Database Adapter (`database.py`)
 
-Repositorio SQLAlchemy 2.0 para favoritos. Usa el pattern **Repository** para abstraer la DB del core.
+Repositorio SQLAlchemy 2.0 con 6 tablas:
 
-**Características:**
-- **Auto-creación de tablas** con `Base.metadata.create_all()` al instanciar.
-- **Idempotencia**: `add()` con `IntegrityError` se traga el error si el favorito ya existe.
-- **SQLite en testing**: los tests usan `sqlite://` (in-memory), que comparte la misma API que PostgreSQL para CRUD básico.
-- **Graceful degradation**: el server intenta PostgreSQL, y si falla, cae a JSON sin romper la app.
+| Tabla | Clase Row | Propósito |
+|-------|-----------|-----------|
+| `favorites` | `FavoriteRow` | Favoritos del usuario |
+| `price_snapshots` | `PriceSnapshotRow` | Snapshots periódicos de precios |
+| `price_history` | `PriceHistoryRow` | Histórico cacheado (7d, 30d, 90d) |
+| `pipeline_runs` | `PipelineRunRow` | Registro de ejecuciones del pipeline |
+| `price_alerts` | `PriceAlertRow` | Alertas de precio configurables |
+| `portfolio_holdings` | `PortfolioHoldingRow` | Holdings del portfolio |
 
-```python
-class FavoritesRepository:
-    def __init__(self, database_url: str):
-        self._engine = create_engine(database_url, pool_pre_ping=True)
-        self._session_factory = sessionmaker(bind=self._engine)
-        Base.metadata.create_all(self._engine)  # tablas auto
-```
+**Repositorios:**
+
+| Clase | Tabla | Métodos |
+|-------|-------|---------|
+| `FavoritesRepository` | `favorites` | CRUD + idempotencia |
+| `PortfolioRepository` | `portfolio_holdings` | CRUD + `get_summary()` con P&L |
 
 ---
 
@@ -304,449 +301,172 @@ El pipeline es un **ETL** (Extract, Transform, Load) que mantiene la base de dat
 
 | Datos | Frecuencia | Tabla |
 |-------|-----------|-------|
-| Precios top 100 monedas | Cada 30 min | `price_snapshots` |
+| Precios top 100 monedas | Cada 30 min (manual dispatch) | `price_snapshots` |
 | Histórico (7d, 30d, 90d) | Cada 6h | `price_history` |
 | Migraciones DB | Al arrancar | `alembic_version` |
+| Alertas de precio | Post-pipeline | `check_alerts()` |
 
 #### Cómo funciona
 
 ```python
 def run(database_url, top_n=100):
-    # 1. Migraciones Alembic
     run_migrations(database_url)
-
-    # 2. Extraer de CoinGecko
     raw_coins = client.get_top_coins(limit=top_n)
-
-    # 3. Transformar y cargar en price_snapshots
     rows = [PriceSnapshotRow(...) for raw in raw_coins]
     session.add_all(rows)
-
-    # 4. Histórico (solo si pasaron +6h)
     _refresh_history_if_stale(client, engine)
+    triggered = check_alerts(engine)
 ```
 
 #### Cache-first (Opción B)
-
-Todos los endpoints de la API siguen esta estrategia:
 
 ```
 Request → ¿Hay datos en DB? → Sí → 10ms 🚀
                            → No → CoinGecko (fallback) → 1-3s
 ```
 
-Esto aplica a:
-- `GET /api/price/{query}` → `get_latest_snapshot()`
-- `GET /api/prices` → `get_latest_snapshots()`
-- `GET /api/top` → `get_top_from_db()`
-- `GET /api/history/{query}` → `get_history_from_db()`
+#### Alertas de precio
 
-#### Ejecución
-
-El pipeline se ejecuta de tres formas:
-1. **GitHub Actions**: cada 30 min automáticamente
-2. **CLI**: `crypto-tracker pipeline`
-3. **Docker**: `docker run -e DATABASE_URL=... crypto-tracker pipeline`
+Después de cada corrida del pipeline, `check_alerts()` revisa las alertas activas. Cada alerta tiene `coin_id`, `condition` ("above" | "below"), `target_price`. Cuando se dispara → `is_active = 0`.
 
 ---
 
-### 4. CLI — Interfaz de terminal
+### 4. Telegram Bot
 
-**Archivo:** `src/cli/commands.py`
+**Archivo:** `src/telegram/bot.py`
 
-Construido con [Click](https://click.palletsprojects.com/). Es un grupo de comandos con tres subcomandos:
+Bot de Telegram construido con [python-telegram-bot](https://python-telegram-bot.org/) (v20+). Corre como un proceso standalone.
 
-```bash
-crypto-tracker price btc eth sol       # precios actuales
-crypto-tracker list-coins --limit 20   # top por market cap
-crypto-tracker search cardano          # búsqueda por nombre/símbolo
-```
+#### Comandos
 
-**Principio:** el CLI no llama a la API directamente. Solo conoce `PriceService`. Si mañana cambiamos de CoinGecko a otra fuente, el CLI no se entera.
+| Comando | Descripción |
+|---------|-------------|
+| `/start` | Mensaje de bienvenida |
+| `/price COIN` | Precio actual (ej: `/price btc`) |
+| `/top [N]` | Top N monedas (default 10) |
+| `/alert COIN above\|below PRECIO` | Crear alerta de precio |
+| `/help` | Ayuda |
 
-#### Formato de salida
+#### Autorización
 
-- Precios con decimales adaptativos: `$45,000.00`, `$0.0042`, `$0.00000042`
-- Cambio 24h con color: `▲ +2.50%` en verde, `▼ -1.20%` en rojo
-- Market cap humanizado: `$900.50B`, `$1.20T`
-
----
-
-### 4. Config — Settings
-
-**Archivo:** `src/config/settings.py`
-
-Carga configuración desde variables de entorno, con soporte para archivo `.env`:
+Soporta una **lista blanca** opcional via `TELEGRAM_ALLOWED_USERS`. Si no está configurada, responde a todos.
 
 ```python
-@dataclass(frozen=True)
-class Settings:
-    coingecko_api_key: str = ""                # opcional, para más rate limit
-    coingecko_base_url: str = "https://api.coingecko.com/api/v3"
-    default_currency: str = "usd"
-    cache_ttl: int = 60                        # segundos
-    favorites_file: Path = Path.home() / ".crypto_tracker.json"
+def _is_allowed(user_id: int) -> bool:
+    return not _ALLOWED_USERS or user_id in _ALLOWED_USERS
 ```
-
-Usamos un dataclass `frozen=True` para que la configuración no se mute accidentalmente en runtime.
 
 ---
 
-### 5. API Layer — REST endpoints
+### 5. Portfolio y Alertas
 
-**Archivos:** `src/api/server.py`, `src/api/client.py`
+#### PortfolioRepository
 
-Esta capa **no existía en el diseño original**. Se agregó para desacoplar Streamlit del core: en vez de importar `PriceService` directo, el dashboard ahora habla HTTP con FastAPI.
+**Archivo:** `src/adapters/database.py` (clase `PortfolioRepository`, línea 323)
 
-#### Server (`server.py`)
+Repositorio para tracking de holdings con **cálculo de P&L**.
 
-FastAPI con 10 endpoints, OpenAPI docs automáticas en `/docs`, cache-first en PostgreSQL, y precarga mínima al arrancar.
+**CRUD completo:**
+- `create(coin_id, symbol, quantity, purchase_price)` — validaciones: quantity > 0, price >= 0
+- `get_by_id(holding_id)` — lookup individual
+- `list_all()` — ordenado por `created_at` descendente
+- `update(holding_id, quantity?, purchase_price?)` — actualización parcial
+- `delete(holding_id)` — returns True si existía
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check con versión y fuente de favoritos |
-| `/api/price/{query}` | GET | Precio de una moneda |
-| `/api/prices` | GET | Precios batch (vía query string `?q=btc,eth,sol`) |
-| `/api/top` | GET | Top N por market cap |
-| `/api/history/{query}` | GET | Histórico para gráficos |
-| `/api/search/{query}` | GET | Búsqueda por nombre/símbolo |
-| `/api/favorites` | GET | Listar favoritos |
-| `/api/favorites/{symbol}` | POST | Agregar favorito |
-| `/api/favorites/{symbol}` | DELETE | Quitar favorito |
-
-**Manejo de errores:** cada excepción del dominio se mapea a un código HTTP:
-
-| Excepción | HTTP | Mensaje |
-|-----------|------|---------|
-| `CoinNotFoundError` | 404 | "Moneda no encontrada" |
-| `RateLimitError` | 429 | "Límite de API alcanzado" |
-| `NetworkError` | 502 | "Error de conexión externa" |
-| `ValidationError` | 422 | Detail con el error |
-| `APIError` | 502 | Detail del error |
-| `CryptoTrackerError` (genérico) | 500 | "Error interno" |
-
-**Precarga:** al arrancar, un thread en background precarga datos populares (top 20, precios de 10 monedas, histórico de BTC) usando su propio rate limiter para no interferir con requests de usuarios.
-
-#### Client (`client.py`)
-
-Cliente HTTP que Streamlit usa para consumir la API. Traduce respuestas HTTP y errores de red a las excepciones del dominio (`CoinNotFoundError`, `RateLimitError`, `NetworkError`).
+**P&L Summary:**
 
 ```python
-# Antes: Streamlit importaba PriceService directo
-from src.core.price_service import PriceService
-service = PriceService(api_client=client)
-data = service.get_price("btc")
+def get_summary(self, current_prices: dict[str, float]) -> dict:
+    """
+    Calcula:
+    - total_value: valor actual de todos los holdings
+    - total_cost: costo total de compra
+    - total_pnl: ganancia/pérdida neta
+    - pnl_percent: porcentaje sobre el costo
+    - holdings_count: cantidad de posiciones
 
-# Ahora: Streamlit llama a la API vía HTTP
-from src.api import client as api
-data = api.get_price("btc")  # GET → http://localhost:8000/api/price/btc
+    Si un coin_id no está en current_prices, usa purchase_price como fallback
+    (P&L neutro para esa moneda).
+    """
 ```
-
-**¿Por qué este cambio?**
-- **Cache compartido**: la API cachea respuestas de CoinGecko y todas las sesiones de Streamlit se benefician.
-- **Rerenders más livianos**: Streamlit no carga todo el dominio, solo recibe JSON.
-- **API sirve a cualquier frontend**: React, mobile, curl — todos pueden usar los mismos endpoints.
 
 ---
 
 ## Flujo de datos
 
-Hay **dos caminos posibles** según la interfaz que use el usuario. Ambos terminan en el mismo `PriceService` y `CoinGeckoClient`.
+Hay **tres caminos posibles** según la interfaz que use el usuario. Todos terminan en el mismo `PriceService` y `CoinGeckoClient`.
 
 ### Camino A — CLI (llamada directa al core)
 
 ```
-┌─────────────┐
-│   Usuario   │
-│  "btc"      │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│  CLI (commands.py)                                          │
-│  - Valida input                                              │
-│  - Llama a service.get_price("btc")                         │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  PriceService (core)                                        │
-│  1. Normaliza "btc"                                         │
-│  2. SYMBOL_TO_ID → "bitcoin"                                │
-│  3. client.get_price(["bitcoin"], "usd")                    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  CoinGeckoClient (adapter)                                  │
-│  TTL cache → Rate limiter → HTTP GET → parse → cache        │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  PriceService → CLI                                         │
-│  dict → PriceData → CoinSearchResult → formateo → pantalla  │
-└─────────────────────────────────────────────────────────────┘
+Usuario → CLI (commands.py) → PriceService → CoinGeckoClient → HTTP → CoinGecko
 ```
 
-### Camino B — Streamlit (vía API REST)
+### Camino B — Streamlit / Frontend (vía API REST)
 
 ```
-┌─────────────┐
-│   Usuario   │
-│  "btc"      │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Streamlit (app.py)                                         │
-│  api.get_price("btc")  →  HTTP GET                          │
-└──────────────────────────┬──────────────────────────────────┘
-                           │  GET http://localhost:8000/api/price/btc
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  FastAPI (server.py)                                        │
-│  1. Parsea params                                           │
-│  2. _service.get_price("btc")                               │
-│  3. CoinSearchResult → CoinOut (Pydantic)                   │
-│  4. JSON response                                           │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  PriceService → CoinGeckoClient (mismo que Camino A)        │
-└─────────────────────────────────────────────────────────────┘
+Usuario → Streamlit/Astro → HTTP GET → FastAPI → DB (cache-first) → CoinGecko (fallback)
 ```
 
-**¿Por qué dos caminos?** Porque Streamlit rerenderiza CONSTANTEMENTE. Si cada rerender importara todo el dominio, sería lento. La API corre separada (otro proceso o container), cachea respuestas en memoria, y sirve datos a múltiples sesiones.
+### Camino C — Telegram Bot
 
-**Nota clave:** El `core` nunca ve un `requests.Response`. Solo ve dicts de Python. Los adapters son los únicos que hablan con el mundo exterior.
+```
+Usuario → Telegram Bot → PriceService → CoinGeckoClient → HTTP → CoinGecko
+```
 
 ---
 
-## Decisiones clave
+## Frontend Astro
 
-### ¿Por qué Protocol en vez de ABC?
+**Directorio:** `frontend/`
 
-```python
-class CoinGeckoClientProtocol(Protocol):
-    ...
+Frontend estático construido con [Astro 6](https://astro.build/). Se deploya a **GitHub Pages** automáticamente.
+
+### Estructura
+
 ```
-
-Usamos `typing.Protocol` (structural typing) porque:
-- No necesitamos que `CoinGeckoClient` herede de nada.
-- Cualquier objeto con los mismos métodos sirve (mocks, stubs, clientes alternativos).
-- Es más flexible que una ABC para proyectos pequeños.
-
-### ¿Por qué dataclasses en vez de Pydantic?
-
-Las dataclasses de la stdlib son suficientes para este dominio. No necesitamos validación de schema en runtime ni serialización JSON automática. Las dataclasses son más livianas y no añaden dependencias.
-
-### ¿Por qué JSON en vez de SQLite para favoritos?
-
-Intencionalmente simple. Una lista de símbolos no justifica una base de datos. El archivo JSON es legible, portable, y se puede versionar si el usuario lo desea.
-
-### ¿Por qué `st.cache_resource` en vez de `st.cache_data`?
-
-Los objetos del dominio (`Cryptocurrency`, `PriceData`) no son pickle-serializables de forma trivial (algunos tienen `__eq__` custom). `st.cache_resource` mantiene la referencia en memoria con TTL, sin intentar serializar.
-
-### ¿Por qué TTL cache propio en vez de `functools.lru_cache`?
-
-`lru_cache` no soporta TTL ni argumentos mutables (como `list`). Nuestro `TTLCache` es simple, con eviction por antigüedad, y usa tuplas como clave.
-
-### ¿Por qué FastAPI en vez de Flask?
-
-FastAPI tiene **OpenAPI docs automáticas** (`/docs`, `/redoc`), validación con Pydantic, y type hints nativos. Para un proyecto de datos donde querés que otros puedan explorar la API fácilmente, es muy superior. Flask requiere configurar todo eso manualmente.
-
-### ¿Por qué Streamlit consume la API vía HTTP en vez de importar el core directo?
-
-Es una decisión que cambiamos a mitad del proyecto. Originalmente Streamlit importaba `PriceService` directo. El problema: cada rerender de Streamlit reinicia el script, y aunque `st.cache_resource` ayuda, el caché es por-sesión. Con la API:
-
-1. **Cache compartido**: una sola instancia de `CoinGeckoClient` sirve a todas las sesiones.
-2. **Rerenders livianos**: Streamlit solo recibe JSON, no carga todo el dominio.
-3. **La API es independiente**: puede servir a cualquier frontend (React, mobile, curl).
-
-El costo: un proceso extra que gestionar y latencia de red local (~1ms, imperceptible).
-
-### ¿Por qué PostgreSQL + JSON en vez de solo JSON?
-
-El JSON file es simple y funciona siempre. PostgreSQL se suma como opción para entornos donde:
-
-- **Múltiples usuarios** comparten la misma instalación (Docker Compose).
-- **Persistencia confiable** sin riesgo de corrupción de archivo.
-- **Operaciones concurrentes** sin race conditions.
-
-La clave: **graceful degradation**. Si configuraste DB pero no funciona, el sistema cae a JSON sin que el usuario se entere. Esto permite desarrollo local sin PostgreSQL y producción con DB.
-
-### ¿Por qué SQLAlchemy 2.0 para la DB?
-
-SQLAlchemy 2.0 con `DeclarativeBase` y `sessionmaker` es el estándar actual. Usamos SQLite in-memory para tests (misma API que PostgreSQL para CRUD), sin necesidad de mockear.
+frontend/
+├── src/
+│   ├── components/     # CoinsTable, PriceCard, ThemeToggle
+│   ├── layouts/        # BaseLayout (header + footer + theme)
+│   ├── lib/            # api.ts, render.ts
+│   ├── pages/          # index, price/[slug], top, search, favorites, 404
+│   └── styles/         # global.css
+├── astro.config.mjs
+└── package.json
+```
 
 ---
 
 ## Testing
 
-**Filosofía:** testear cada capa en aislamiento, con mocks para las dependencias. Cada adaptador/interfaz tiene su propia suite.
+**Filosofía:** testear cada capa en aislamiento, con mocks para las dependencias.
 
-| Suite | Archivo | Casos | Qué testea |
+| Suite | Archivo | Tests | Qué testea |
 |-------|---------|-------|------------|
-| Models | `test_models.py` | 50 | Creación, igualdad, formateo, timestamps |
-| Price Service | `test_price_service.py` | 30 | Lógica de negocio, resolución de símbolos, validaciones |
-| CoinGecko Client | `test_api_client.py` | 18 | HTTP mocks, rate limit, errores 429/404/500, cache |
-| CLI | `test_cli.py` | 17 | Click CliRunner, argumentos, opciones, errores |
-| JSON Favorites | `test_favorites.py` | 16 | CRUD JSON, persistencia, corrupción de archivo |
-| DB Repository | `test_database.py` | 14 | SQLAlchemy con SQLite in-memory |
-| API Server | `test_api_server.py` | ~50 | FastAPI con TestClient + mocks |
-| API HTTP Client | `test_api_client_http.py` | ~44 | Cliente HTTP con mocks de requests |
+| Models | `test_models.py` | ~50 | Creación, igualdad, formateo |
+| Price Service | `test_price_service.py` | ~30 | Lógica de negocio, símbolos |
+| CoinGecko Client | `test_api_client.py` | ~18 | HTTP mocks, rate limit |
+| CLI | `test_cli.py` | ~17 | Click CliRunner |
+| JSON Favorites | `test_favorites.py` | ~16 | CRUD JSON |
+| DB FavoritesRepo | `test_database.py` | ~14 | SQLAlchemy + SQLite |
+| API Server | `test_api_server.py` | ~50 | FastAPI TestClient |
+| API HTTP Client | `test_api_client_http.py` | ~44 | HTTP client mocks |
+| PortfolioRepo | `test_portfolio_repository.py` | 37 | CRUD + P&L |
 
-**Total: 256 tests — 73% coverage.**
-
-### Patrones de test por capa
-
-| Capa | Cómo se testea | Herramienta |
-|------|----------------|-------------|
-| **Core** | Mock del API client | `MagicMock` + Protocol |
-| **Adapters** | Mock de `requests.Session` | `create_autospec` |
-| **CLI** | Mock del service | Click `CliRunner` |
-| **DB** | SQLite in-memory | `sqlite://` + fixtures |
-| **API Server** | Mock de service + favorites | FastAPI `TestClient` |
-| **API HTTP Client** | Mock de `requests.get/post/delete` | `unittest.mock.patch` |
-
-### Ejemplo: test del API Server con TestClient
-
-```python
-def test_get_price_by_symbol(client: TestClient, mock_service: MagicMock):
-    mock_service.get_price.return_value = _coin_search_result()
-    resp = client.get("/api/price/btc")
-    assert resp.status_code == 200
-    assert resp.json()["symbol"] == "btc"
-    assert resp.json()["price"] == 45000.50
-    mock_service.get_price.assert_called_once_with("btc", currency="usd")
-```
-
-El `TestClient` de Starlette permite testear endpoints sin levantar un servidor HTTP. Mockeamos `_service` y `_favorites` en el módulo server, y desactivamos la precarga para los tests.
-
----
-
-## Triple UI: CLI + Streamlit + API
-
-El proyecto empezó con dos interfaces (CLI + Streamlit) compartiendo el mismo `PriceService`. Después agregamos una tercera: la **API REST**, que a su vez es consumida por el Streamlit modernizado.
-
-```
-                         ┌─────────────────┐
-                         │   PriceService   │
-                         │   (core)         │
-                         └────────┬────────┘
-                                  │
-              ┌───────────────────┼───────────────────┐
-              │                   │                   │
-              ▼                   ▼                   ▼
-    ┌─────────────────┐  ┌──────────────┐  ┌─────────────────┐
-    │   CLI (Click)   │  │  FastAPI     │  │  Streamlit App  │
-    │   commands.py   │  │  server.py   │  │   app.py        │
-    │                 │  │              │  │       │         │
-    │  • Terminal     │  │  • REST API  │  │  ❌ No llama   │
-    │  • Texto plano  │  │  • /docs     │  │  directo a core │
-    │  • Color cód.   │  │  • Precarga  │  │       │         │
-    └─────────────────┘  └──────┬───────┘  │  ✅ Consume API │
-                               │           │  vía HTTP       │
-                               └───────────┴─────────────────┘
-```
-
-### Relaciones entre interfaces
-
-| Interfaz | ¿Importa core directo? | ¿Consume API? | Ideal para |
-|----------|----------------------|---------------|------------|
-| **CLI** | ✅ Sí | ❌ No | Terminal, scripts, automatización |
-| **FastAPI** | ✅ Sí | ❌ No | Otros frontends, integraciones |
-| **Streamlit** | ❌ No | ✅ Sí | Usuarios finales, dashboards |
-
-### ¿Por qué Streamlit no importa core directo?
-
-Originalmente sí lo hacía. Pero Streamlit rerenderiza CONSTANTEMENTE (cada click, cada input). Si cada rerender importara todo el dominio — `PriceService`, `CoinGeckoClient`, models, excepciones, etc. — la experiencia se degradaba. La API resuelve esto:
-
-1. **Cache compartido**: una sola instancia de `CoinGeckoClient` en la API sirve a todas las sesiones de Streamlit.
-2. **Rerenders livianos**: Streamlit solo recibe JSON, no carga módulos de Python.
-3. **La API es independiente**: puede servir a cualquier frontend (React, mobile, curl).
-
-Este es un buen ejemplo de cómo la arquitectura limpia permite evolucionar: el core no cambió, solo reorganizamos cómo las interfaces se conectan a él.
-
----
-
-## Diagrama de dependencias
-
-```
-                    ┌─────────────────────┐
-                    │      Config         │
-                    │     settings        │
-                    └──────────┬──────────┘
-                               │
-           ┌───────────────────┼───────────────────────┐
-           │                   │                       │
-           ▼                   ▼                       ▼
-    ┌────────────┐    ┌──────────────┐        ┌────────────┐
-    │    CLI     │    │   FastAPI    │        │   Tests    │
-    │  commands  │    │  server.py   │        │   mocks    │
-    └─────┬──────┘    └──────┬───────┘        └─────┬──────┘
-          │                  │                       │
-          │                  ▼                       │
-          │           ┌──────────────┐               │
-          │           │  Streamlit   │               │
-          │           │   app.py     │               │
-          │           │  (via HTTP)  │               │
-          │           └──────┬───────┘               │
-          │                  │                       │
-          └──────────────────┼───────────────────────┘
-                             │
-                             ▼
-                      ┌────────────┐
-                      │    Core    │
-                      │  service   │
-                      │  models    │
-                      │ favorites  │
-                      └─────┬──────┘
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-              ▼             ▼             ▼
-    ┌────────────┐  ┌──────────────┐  ┌──────────────┐
-    │ CoinGecko  │  │  Database   │  │   JSON File  │
-    │  Client    │  │ Repository  │  │ Favorites    │
-    │  (HTTP)    │  │ (PostgreSQL)│  │ (fallback)   │
-    └─────┬──────┘  └──────────────┘  └──────────────┘
-          │
-          ▼
-    ┌────────────┐
-    │  External  │
-    │ CoinGecko  │
-    └────────────┘
-```
-
-**Regla visual:** las flechas apuntan hacia abajo. Ninguna flecha apunta hacia arriba. El `core` no conoce a ninguna interfaz, solo define contratos (Protocol) que los adapters implementan.
+**Total: 312 tests — 9 test files.**
 
 ---
 
 ## Docker y deployment
 
-El proyecto incluye Docker multi-entrypoint para levantar cualquier componente con la misma imagen:
-
-```dockerfile
-# Default: API
-# docker run crypto-tracker
-
-# Streamlit
-# docker run -e ENTRYPOINT=streamlit crypto-tracker
-
-# Pipeline ETL
-# docker run -e DATABASE_URL=... crypto-tracker pipeline
-```
-
-El entrypoint se resuelve con un case en el CMD:
+### Docker multi-entrypoint
 
 ```dockerfile
 CMD ["sh", "-c", "case ${ENTRYPOINT:-api} in \
   pipeline) crypto-tracker pipeline ;; \
   streamlit) streamlit run app.py ;; \
+  telegram) crypto-tracker-telegram ;; \
   *) uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000} ;; \
 esac"]
 ```
@@ -755,57 +475,28 @@ esac"]
 
 ```yaml
 services:
-  db:            # PostgreSQL 16 Alpine — datos persistentes
-  api:           # FastAPI — corre migraciones + precarga al arrancar
-  streamlit:     # Dashboard — depende de api (healthcheck)
+  db:            # PostgreSQL 16 Alpine
+  api:           # FastAPI
+  streamlit:     # Dashboard
 ```
 
-**Flujo de arranque:**
-1. PostgreSQL levanta y pasa su healthcheck (`pg_isready`).
-2. FastAPI arranca, conecta a la DB, y expone el health endpoint.
-3. Streamlit arranca y apunta a `http://api:8000` (DNS interno de Docker).
+### GitHub Actions (3 workflows)
 
-**Variables de entorno:**
-| Variable | Dónde se usa | Default |
-|----------|-------------|---------|
-| `COINGECKO_API_KEY` | API + precarga | (vacío — free tier) |
-| `DATABASE_URL` | API → FavoritesRepository | (vacío — usa JSON) |
-| `API_BASE_URL` | Streamlit → api client | `http://api:8000` |
+| Workflow | Disparador | Qué hace |
+|----------|-----------|----------|
+| `test.yml` | Push/PR a main | Ruff + mypy + pytest |
+| `pipeline.yml` | Manual dispatch | ETL en producción |
+| `frontend.yml` | Push a main (frontend/) | Astro build + Pages deploy |
 
-### Dockerfile
+### Variables de entorno
 
-Una sola imagen con tres entrypoints (API, Streamlit, Pipeline) y configuración dinámica del puerto para Render:
-
-```dockerfile
-CMD ["sh", "-c", "case ${ENTRYPOINT:-api} in \
-  pipeline) crypto-tracker pipeline ;; \
-  streamlit) streamlit run app.py ;; \
-  *) uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000} ;; \
-esac"]
-```
-
-### Makefile
-
-Comandos útiles para el día a día:
-
-```bash
-make docker-build    # build imagen
-make docker-up       # docker compose up -d
-make docker-logs     # logs en vivo
-make docker-rebuild  # rebuild + restart
-make docker-down     # stop todo
-```
-
-### Launcher local (`run.py`)
-
-Para desarrollo sin Docker:
-
-```bash
-python run.py
-# Arranca FastAPI + Streamlit como subprocessos
-# Hace polling al health endpoint hasta que la API responda
-# Cleanup automático con atexit
-```
+| Variable | Default | Uso |
+|----------|---------|-----|
+| `COINGECKO_API_KEY` | (vacío) | API + precarga |
+| `DATABASE_URL` | (vacío) | Repositorios DB |
+| `API_BASE_URL` | `http://api:8000` | Streamlit → API |
+| `TELEGRAM_BOT_TOKEN` | (vacío) | Bot de Telegram |
+| `TELEGRAM_ALLOWED_USERS` | (vacío) | Lista blanca del bot |
 
 ---
 

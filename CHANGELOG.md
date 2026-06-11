@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-06-11
+
+### Added
+- Frontend Astro 6 en `frontend/` con deploy a GitHub Pages.
+- Páginas: index, price/[slug], top, search, favorites, 404.
+- Componentes: CoinsTable, PriceCard, ThemeToggle.
+- Layout base con header + footer + dark/light theme toggle.
+- Client-side API client (`api.ts`) y helpers de renderizado (`render.ts`).
+- `global.css` con Google Fonts y sistema de temas.
+- Workflow `frontend.yml` para build + deploy automático.
+- `test_portfolio_repository.py` — 37 tests para PortfolioRepository (CRUD + P&L).
+- Badge de frontend y GitHub Pages en README.
+- Portfolio endpoints en la tabla de API REST.
+
+### Changed
+- README.md actualizado con frontend, Telegram, portfolio, 312 tests.
+- ARCHITECTURE.md actualizado con frontend, Telegram, portfolio, nuevas tablas.
+- ROADMAP.md con fases 14-18 completadas.
+- README.md badge de tests: 256 → 312.
+- CONTRIBUTING.md con frontend build step.
+- frontend/README.md de template Astro a documentación real del proyecto.
+- PULL_REQUEST_TEMPLATE.md: agregado frontend build check.
+
+### Fixed
+- Cobertura de documentación al 100% del estado actual del proyecto.
+- Puerto dinámico $PORT en Dockerfile para compatibilidad con Render.
+
 ## [0.3.0] — 2026-06-11
 
 ### Added
@@ -85,8 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests unitarios para modelos, API client y price service con mocks.
 - Documentación inicial (README, ROADMAP, CONTRIBUTING, AUTHORS).
 
+[0.4.0]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.2.0...v0.3.0
-[Unreleased]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.4.0...HEAD
 [0.2.0]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/LeandroBenjaminL/crypto-tracker/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/LeandroBenjaminL/crypto-tracker/releases/tag/v0.0.1
