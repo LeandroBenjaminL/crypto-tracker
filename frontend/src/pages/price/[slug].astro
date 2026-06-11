@@ -1,8 +1,20 @@
 ---
 export async function getStaticPaths() {
-  // Pre-generate pages for the most common coins
-  const slugs = ["btc", "eth", "sol", "xrp", "ada", "doge", "dot", "avax", "link", "matic"];
-  return slugs.map((slug) => ({ params: { slug } }));
+  // Intentar obtener top 100 de CoinGecko en build time
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false",
+    );
+    if (res.ok) {
+      const coins = await res.json();
+      return coins.map((c: any) => ({ params: { slug: c.symbol } }));
+    }
+    throw new Error(`HTTP ${res.status}`);
+  } catch {
+    // Fallback: lista manual si CoinGecko falla (rate limit, red, etc.)
+    const slugs = ["btc", "eth", "sol", "xrp", "ada", "doge", "dot", "avax", "link", "matic"];
+    return slugs.map((slug) => ({ params: { slug } }));
+  }
 }
 
 const { slug } = Astro.params;

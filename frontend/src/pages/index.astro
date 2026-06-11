@@ -52,6 +52,7 @@ import CoinsTable from "../components/CoinsTable.astro";
 
 <script>
   import { getPrices, getTop, fmtPrice, fmtChange } from "../lib/api";
+  import { renderCoinsTable } from "../lib/render";
 
   async function loadHero() {
     try {
@@ -82,44 +83,10 @@ import CoinsTable from "../components/CoinsTable.astro";
     if (!container) return;
     try {
       const coins = await getTop(10);
-      if (!coins.length) {
-        container.innerHTML = `<p class="text-muted">No se pudieron cargar los datos.</p>`;
-        return;
-      }
-      const rows = coins.map(
-        (c) => `
-        <tr>
-          <td class="text-muted">${c.rank}</td>
-          <td>
-            <a href="/crypto-tracker/price/${c.symbol}" style="color: inherit; font-weight: 500">
-              ${c.name}
-            </a>
-            <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">
-              ${c.symbol?.toUpperCase() ?? ""}
-            </span>
-          </td>
-          <td>${c.price != null ? fmtPrice(c.price) : "—"}</td>
-          <td class="${(c.change_24h ?? 0) >= 0 ? "green" : "red"}">
-            ${c.change_24h != null ? fmtChange(c.change_24h) : "—"}
-          </td>
-          <td style="text-align: right">${c.market_cap != null ? fmtCap(c.market_cap) : "—"}</td>
-          <td style="text-align: right">${c.volume_24h != null ? fmtCap(c.volume_24h) : "—"}</td>
-        </tr>`
-      ).join("");
-      container.innerHTML = `
-        <div class="card" style="overflow-x: auto">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem">
-            <h3 style="font-size: 0.9rem; opacity: 0.7">Top 10 Criptomonedas</h3>
-            <a href="/crypto-tracker/top" class="btn" style="font-size: 0.8rem">Ver todas →</a>
-          </div>
-          <table>
-            <thead><tr>
-              <th>#</th><th>Nombre</th><th>Precio</th><th>24h</th>
-              <th style="text-align: right">Market Cap</th><th style="text-align: right">Volumen</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
+      container.innerHTML = renderCoinsTable(coins, {
+        caption: 'Top 10 Criptomonedas',
+        viewAllLink: '/crypto-tracker/top',
+      });
     } catch {
       container.innerHTML = `<p class="text-muted">Error al cargar datos.</p>`;
     }

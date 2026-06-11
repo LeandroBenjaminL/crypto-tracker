@@ -25,7 +25,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 </BaseLayout>
 
 <script>
-  import { getTop, fmtPrice, fmtChange, fmtCap } from "../lib/api";
+  import { getTop } from "../lib/api";
+  import { renderCoinsTable } from "../lib/render";
   const BASE = "/crypto-tracker";
 
   async function loadTop(limit = 10) {
@@ -34,36 +35,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     container.innerHTML = `<div class="spinner"></div>`;
     try {
       const coins = await getTop(limit);
-      if (!coins.length) {
-        container.innerHTML = `<p class="text-muted">No se pudieron cargar los datos.</p>`;
-        return;
-      }
-      const rows = coins
-        .map(
-          (c) => `
-        <tr>
-          <td class="text-muted">${c.rank}</td>
-          <td>
-            <a href="${BASE}/price/${c.symbol}" style="color: inherit; font-weight: 500">${c.name}</a>
-            <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">${c.symbol?.toUpperCase() ?? ""}</span>
-          </td>
-          <td>${c.price != null ? fmtPrice(c.price) : "—"}</td>
-          <td class="${(c.change_24h ?? 0) >= 0 ? "green" : "red"}">${c.change_24h != null ? fmtChange(c.change_24h) : "—"}</td>
-          <td style="text-align: right">${c.market_cap != null ? fmtCap(c.market_cap) : "—"}</td>
-          <td style="text-align: right">${c.volume_24h != null ? fmtCap(c.volume_24h) : "—"}</td>
-        </tr>`
-        )
-        .join("");
-      container.innerHTML = `
-        <div class="card" style="overflow-x: auto">
-          <table>
-            <thead><tr>
-              <th>#</th><th>Nombre</th><th>Precio</th><th>24h</th>
-              <th style="text-align: right">Market Cap</th><th style="text-align: right">Volumen</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
+      container.innerHTML = renderCoinsTable(coins);
     } catch {
       container.innerHTML = `<p class="text-muted">Error al cargar datos.</p>`;
     }
