@@ -239,13 +239,39 @@ async function _cgSearch(query: string): Promise<CoinResult[]> {
 }
 
 // ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+
+/** Completar market_cap, volume, rank desde cache de top coins */
+function _enrichFromCache(coin: CoinResult): CoinResult {
+	if (!_topCache) return coin;
+	const cached = _topCache.find(
+		(c) =>
+			c.symbol === coin.symbol ||
+			c.id === coin.id ||
+			c.name.toLowerCase() === coin.name.toLowerCase(),
+	);
+	if (!cached) return coin;
+	return {
+		...coin,
+		market_cap: coin.market_cap ?? cached.market_cap,
+		volume_24h: coin.volume_24h ?? cached.volume_24h,
+		rank: coin.rank || cached.rank,
+	};
+}
+
+// ──────────────────────────────────────────────
 // Public API — CoinGecko primario, Render fallback
 // ──────────────────────────────────────────────
 
 export async function getPrice(query: string): Promise<CoinResult | null> {
 	// 1) CoinGecko directo
 	const cg = await _cgPrice(query);
-	if (cg) return cg;
+	if (cg) {
+		// Completar market_cap, volume, rank desde cache de top coins
+		const enriched = _enrichFromCache(cg);
+		return enriched;
+	}
 	// 2) Render API (fallback — trae datos de DB con mas campos)
 	try {
 		return await _fetch<CoinResult>(
@@ -358,9 +384,7 @@ export async function searchCoins(query: string): Promise<CoinResult[]> {
 				local.push({
 					id,
 					symbol: sym,
-					name: id.replace(/-/g, " ").replace(/\b\w/g, (c) =>
-						c.toUpperCase(),
-					),
+					name: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
 					rank: 0,
 					price: null,
 					change_24h: null,
