@@ -1,0 +1,136 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CoinsTable from "../components/CoinsTable.astro";
+---
+
+<BaseLayout title="Crypto Tracker — Precios de Criptomonedas" description="Dashboard de precios de criptomonedas en vivo">
+  <!-- Hero -->
+  <div class="container" style="padding-top: 2.5rem; padding-bottom: 1rem">
+    <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.5px">
+      Crypto Tracker
+    </h1>
+    <p class="text-secondary" style="margin-top: 0.3rem; font-size: 1.05rem">
+      Precios en vivo de las principales criptomonedas
+    </p>
+  </div>
+
+  <!-- Hero cards: BTC, ETH, SOL -->
+  <div
+    class="container"
+    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem"
+  >
+    <div class="card" style="padding: 1.25rem">
+      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
+        Bitcoin
+      </div>
+      <div id="hero-btc" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
+      <div id="hero-btc-change" style="font-size: 0.85rem; color: var(--green)">—</div>
+    </div>
+    <div class="card" style="padding: 1.25rem">
+      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
+        Ethereum
+      </div>
+      <div id="hero-eth" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
+      <div id="hero-eth-change" style="font-size: 0.85rem; color: var(--green)">—</div>
+    </div>
+    <div class="card" style="padding: 1.25rem">
+      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.5; margin-bottom: 0.25rem">
+        Solana
+      </div>
+      <div id="hero-sol" style="font-size: 1.5rem; font-weight: 700; color: var(--green)">—</div>
+      <div id="hero-sol-change" style="font-size: 0.85rem; color: var(--green)">—</div>
+    </div>
+  </div>
+
+  <!-- Top 10 table (pre-rendered placeholder, JS rellena) -->
+  <div class="container" style="margin-bottom: 2rem">
+    <div id="top10-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { getPrices, getTop, fmtPrice, fmtChange } from "../lib/api";
+
+  async function loadHero() {
+    try {
+      const coins = await getPrices(["btc", "eth", "sol"]);
+      const ids = ["btc", "eth", "sol"];
+      for (const id of ids) {
+        const coin = coins.find(
+          (c) => c.symbol.toLowerCase() === id || c.id?.toLowerCase() === id
+        );
+        const priceEl = document.getElementById(`hero-${id}`);
+        const changeEl = document.getElementById(`hero-${id}-change`);
+        if (!priceEl || !changeEl) continue;
+        if (coin?.price != null) {
+          const isUp = (coin.change_24h ?? 0) >= 0;
+          priceEl.textContent = fmtPrice(coin.price);
+          priceEl.style.color = isUp ? "var(--green)" : "var(--red)";
+          changeEl.textContent = `${isUp ? "▲" : "▼"} ${fmtChange(coin.change_24h ?? 0)}`;
+          changeEl.style.color = isUp ? "var(--green)" : "var(--red)";
+        }
+      }
+    } catch {
+      // Silently fail — keep showing "—"
+    }
+  }
+
+  async function loadTop10() {
+    const container = document.getElementById("top10-container");
+    if (!container) return;
+    try {
+      const coins = await getTop(10);
+      if (!coins.length) {
+        container.innerHTML = `<p class="text-muted">No se pudieron cargar los datos.</p>`;
+        return;
+      }
+      const rows = coins.map(
+        (c) => `
+        <tr>
+          <td class="text-muted">${c.rank}</td>
+          <td>
+            <a href="/crypto-tracker/price/${c.symbol}" style="color: inherit; font-weight: 500">
+              ${c.name}
+            </a>
+            <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">
+              ${c.symbol?.toUpperCase() ?? ""}
+            </span>
+          </td>
+          <td>${c.price != null ? fmtPrice(c.price) : "—"}</td>
+          <td class="${(c.change_24h ?? 0) >= 0 ? "green" : "red"}">
+            ${c.change_24h != null ? fmtChange(c.change_24h) : "—"}
+          </td>
+          <td style="text-align: right">${c.market_cap != null ? fmtCap(c.market_cap) : "—"}</td>
+          <td style="text-align: right">${c.volume_24h != null ? fmtCap(c.volume_24h) : "—"}</td>
+        </tr>`
+      ).join("");
+      container.innerHTML = `
+        <div class="card" style="overflow-x: auto">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem">
+            <h3 style="font-size: 0.9rem; opacity: 0.7">Top 10 Criptomonedas</h3>
+            <a href="/crypto-tracker/top" class="btn" style="font-size: 0.8rem">Ver todas →</a>
+          </div>
+          <table>
+            <thead><tr>
+              <th>#</th><th>Nombre</th><th>Precio</th><th>24h</th>
+              <th style="text-align: right">Market Cap</th><th style="text-align: right">Volumen</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch {
+      container.innerHTML = `<p class="text-muted">Error al cargar datos.</p>`;
+    }
+  }
+
+  loadHero();
+  loadTop10();
+
+  // Auto-refresh cada 60s
+  setInterval(() => {
+    loadHero();
+    loadTop10();
+  }, 60000);
+</script>

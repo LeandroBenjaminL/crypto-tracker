@@ -1,0 +1,64 @@
+---
+import { fmtPrice, fmtChange, fmtCap } from "../lib/api";
+
+export interface CoinRow {
+  rank: number;
+  name: string;
+  symbol: string;
+  price: number | null;
+  change_24h: number | null;
+  market_cap: number | null;
+  volume_24h: number | null;
+}
+
+interface Props {
+  coins: CoinRow[];
+  caption?: string;
+}
+const { coins, caption } = Astro.props;
+---
+
+<div class="card" style="overflow-x: auto">
+  {caption && (
+    <h3 style="margin-bottom: 0.75rem; font-size: 0.9rem; opacity: 0.7">{caption}</h3>
+  )}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nombre</th>
+        <th>Precio</th>
+        <th>24h</th>
+        <th style="text-align: right">Market Cap</th>
+        <th style="text-align: right">Volumen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {coins.map((c) => {
+        const isUp = (c.change_24h ?? 0) >= 0;
+        return (
+          <tr>
+            <td class="text-muted">{c.rank}</td>
+            <td>
+              <a
+                href={`/crypto-tracker/price/${c.symbol}`}
+                style="color: inherit; font-weight: 500"
+              >
+                {c.name}
+              </a>
+              <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">
+                {c.symbol.toUpperCase()}
+              </span>
+            </td>
+            <td>{c.price != null ? fmtPrice(c.price) : "—"}</td>
+            <td class={isUp ? "green" : "red"}>
+              {c.change_24h != null ? fmtChange(c.change_24h) : "—"}
+            </td>
+            <td style="text-align: right">{c.market_cap != null ? fmtCap(c.market_cap) : "—"}</td>
+            <td style="text-align: right">{c.volume_24h != null ? fmtCap(c.volume_24h) : "—"}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>

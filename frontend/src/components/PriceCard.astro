@@ -1,0 +1,51 @@
+---
+import type { CoinResult } from "../lib/api";
+import { fmtPrice, fmtChange } from "../lib/api";
+
+interface Props {
+  coin: CoinResult;
+  link?: boolean;
+}
+
+const { coin, link } = Astro.props;
+const isUp = (coin.change_24h ?? 0) >= 0;
+const colorClass = isUp ? "green" : "red";
+const arrow = isUp ? "▲" : "▼";
+---
+
+<div class="card" style="padding: 1rem; min-width: 0">
+  <div style="display: flex; justify-content: space-between; align-items: start; gap: 0.5rem">
+    <div>
+      <div style="font-weight: 600; font-size: 1rem">
+        {link ? (
+          <a href={`/crypto-tracker/price/${coin.symbol}`} style="color: inherit">
+            {coin.name}
+          </a>
+        ) : (
+          coin.name
+        )}
+        <span class="text-muted" style="font-weight: 400; margin-left: 0.3rem; font-size: 0.8rem">
+          {coin.symbol?.toUpperCase()}
+        </span>
+      </div>
+      {coin.rank > 0 && (
+        <span class="text-muted" style="font-size: 0.75rem">#{coin.rank}</span>
+      )}
+    </div>
+  </div>
+
+  {coin.price != null ? (
+    <div style="margin-top: 0.5rem">
+      <div style="font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px" class={colorClass}>
+        {fmtPrice(coin.price)}
+      </div>
+      <div style="font-size: 0.85rem" class={colorClass}>
+        {arrow} {fmtChange(coin.change_24h ?? 0)}
+      </div>
+    </div>
+  ) : (
+    <div class="text-muted" style="margin-top: 0.5rem; font-size: 0.85rem">
+      Sin datos
+    </div>
+  )}
+</div>

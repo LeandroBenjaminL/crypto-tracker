@@ -1,0 +1,239 @@
+---
+export interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/svg+xml" href="/crypto-tracker/favicon.svg" />
+    <link rel="icon" href="/crypto-tracker/favicon.ico" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <style is:global>
+      /* ── Reset & base ── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        --bg: #0a0e1a;
+        --bg-card: #131830;
+        --bg-card-hover: #1a2140;
+        --bg-nav: #0f1525;
+        --border: rgba(255, 255, 255, 0.06);
+        --text: #f0f0f0;
+        --text-secondary: #999;
+        --text-muted: rgba(255, 255, 255, 0.4);
+        --green: #00d4aa;
+        --red: #ff6b6b;
+        --accent: #00d4aa;
+        --radius: 12px;
+        --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        color-scheme: dark;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        line-height: 1.5;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      /* ── Utility classes ── */
+      .green {
+        color: var(--green);
+      }
+      .red {
+        color: var(--red);
+      }
+      .text-secondary {
+        color: var(--text-secondary);
+      }
+      .text-muted {
+        color: var(--text-muted);
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 1rem;
+      }
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 1.25rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 32px rgba(0, 0, 0, 0.4);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg-card);
+        color: var(--text);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .btn:hover {
+        background: var(--bg-card-hover);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #000;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+      input {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
+        color: var(--text);
+        font-size: 0.95rem;
+        width: 100%;
+        outline: none;
+        transition: border-color 0.15s ease;
+      }
+      input:focus {
+        border-color: var(--accent);
+      }
+      input::placeholder {
+        color: var(--text-muted);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        padding: 0.6rem 0.75rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+      }
+      tr:hover td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 2rem auto;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Nav -->
+    <nav
+      style="
+        background: var(--bg-nav);
+        border-bottom: 1px solid var(--border);
+        padding: 0.75rem 0;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(8px);
+      "
+    >
+      <div
+        class="container"
+        style="display: flex; align-items: center; gap: 1.5rem"
+      >
+        <a
+          href="/crypto-tracker/"
+          style="font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 0.4rem"
+        >
+          📈 Crypto Tracker
+        </a>
+        <div style="display: flex; gap: 0.75rem; font-size: 0.85rem; flex-wrap: wrap">
+          <a
+            href="/crypto-tracker/"
+            style="padding: 0.3rem 0.6rem; border-radius: 6px; transition: background 0.15s;"
+          >
+            Inicio
+          </a>
+          <a
+            href="/crypto-tracker/top"
+            style="padding: 0.3rem 0.6rem; border-radius: 6px; transition: background 0.15s;"
+          >
+            Top
+          </a>
+          <a
+            href="/crypto-tracker/search"
+            style="padding: 0.3rem 0.6rem; border-radius: 6px; transition: background 0.15s;"
+          >
+            Buscar
+          </a>
+          <a
+            href="/crypto-tracker/favorites"
+            style="padding: 0.3rem 0.6rem; border-radius: 6px; transition: background 0.15s;"
+          >
+            ⭐ Favoritos
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page content -->
+    <main>
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer
+      style="
+        text-align: center;
+        padding: 2rem 1rem;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        border-top: 1px solid var(--border);
+        margin-top: 3rem;
+      "
+    >
+      Datos: CoinGecko &middot; Crypto Tracker &copy; 2026
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,86 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Top Criptomonedas — Crypto Tracker" description="Las criptomonedas con mayor capitalización de mercado">
+  <div class="container" style="padding-top: 2rem">
+    <h1 style="font-size: 1.8rem; font-weight: 700">🏆 Top Criptomonedas</h1>
+    <p class="text-secondary" style="margin-top: 0.3rem">
+      Las monedas con mayor capitalización de mercado
+    </p>
+
+    <!-- Limit selector -->
+    <div style="display: flex; gap: 0.4rem; margin: 1rem 0">
+      <button class="btn top-limit" data-limit="10" style="border-color: var(--accent)">Top 10</button>
+      <button class="btn top-limit" data-limit="25">Top 25</button>
+      <button class="btn top-limit" data-limit="50">Top 50</button>
+      <button class="btn top-limit" data-limit="100">Top 100</button>
+    </div>
+
+    <!-- Table -->
+    <div id="top-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { getTop, fmtPrice, fmtChange, fmtCap } from "../lib/api";
+  const BASE = "/crypto-tracker";
+
+  async function loadTop(limit = 10) {
+    const container = document.getElementById("top-container");
+    if (!container) return;
+    container.innerHTML = `<div class="spinner"></div>`;
+    try {
+      const coins = await getTop(limit);
+      if (!coins.length) {
+        container.innerHTML = `<p class="text-muted">No se pudieron cargar los datos.</p>`;
+        return;
+      }
+      const rows = coins
+        .map(
+          (c) => `
+        <tr>
+          <td class="text-muted">${c.rank}</td>
+          <td>
+            <a href="${BASE}/price/${c.symbol}" style="color: inherit; font-weight: 500">${c.name}</a>
+            <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">${c.symbol?.toUpperCase() ?? ""}</span>
+          </td>
+          <td>${c.price != null ? fmtPrice(c.price) : "—"}</td>
+          <td class="${(c.change_24h ?? 0) >= 0 ? "green" : "red"}">${c.change_24h != null ? fmtChange(c.change_24h) : "—"}</td>
+          <td style="text-align: right">${c.market_cap != null ? fmtCap(c.market_cap) : "—"}</td>
+          <td style="text-align: right">${c.volume_24h != null ? fmtCap(c.volume_24h) : "—"}</td>
+        </tr>`
+        )
+        .join("");
+      container.innerHTML = `
+        <div class="card" style="overflow-x: auto">
+          <table>
+            <thead><tr>
+              <th>#</th><th>Nombre</th><th>Precio</th><th>24h</th>
+              <th style="text-align: right">Market Cap</th><th style="text-align: right">Volumen</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch {
+      container.innerHTML = `<p class="text-muted">Error al cargar datos.</p>`;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    loadTop(10);
+
+    document.querySelectorAll(".top-limit").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const limit = parseInt(btn.dataset.limit, 10);
+        loadTop(limit);
+        document.querySelectorAll(".top-limit").forEach((b) => {
+          b.style.borderColor =
+            parseInt(b.dataset.limit, 10) === limit ? "var(--accent)" : "var(--border)";
+        });
+      });
+    });
+  });
+</script>

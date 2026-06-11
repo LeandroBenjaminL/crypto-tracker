@@ -1,0 +1,107 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Favoritos — Crypto Tracker" description="Tus criptomonedas favoritas">
+  <div class="container" style="padding-top: 2rem">
+    <h1 style="font-size: 1.8rem; font-weight: 700">⭐ Favoritos</h1>
+    <p class="text-secondary" style="margin-top: 0.3rem">
+      Tus criptomonedas guardadas
+    </p>
+
+    <div id="fav-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { getPrices, fmtPrice, fmtChange } from "../lib/api";
+  const BASE = "/crypto-tracker";
+
+  function getFavorites() {
+    try {
+      return JSON.parse(localStorage.getItem("crypto_favorites") || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveFavorites(favs) {
+    localStorage.setItem("crypto_favorites", JSON.stringify(favs));
+  }
+
+  async function loadFavorites() {
+    const container = document.getElementById("fav-container");
+    if (!container) return;
+
+    const favs = getFavorites();
+    if (!favs.length) {
+      container.innerHTML = `
+        <div class="card" style="text-align: center; padding: 2rem">
+          <p class="text-muted">Todavía no tenés favoritos.</p>
+          <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.5rem">
+            Buscá una moneda y agregala desde su página de detalle.
+          </p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="spinner"></div>`;
+
+    try {
+      const coins = await getPrices(favs);
+      if (!coins.length) {
+        container.innerHTML = `<p class="text-muted">No se pudieron cargar los datos.</p>`;
+        return;
+      }
+
+      const rows = coins
+        .map(
+          (c) => {
+            const isUp = (c.change_24h ?? 0) >= 0;
+            return `
+          <tr>
+            <td>
+              <a href="${BASE}/price/${c.symbol}" style="color: inherit; font-weight: 500">${c.name}</a>
+              <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">${c.symbol?.toUpperCase() ?? ""}</span>
+            </td>
+            <td class="${isUp ? "green" : "red"}">${c.price != null ? fmtPrice(c.price) : "—"}</td>
+            <td class="${isUp ? "green" : "red"}">${c.change_24h != null ? fmtChange(c.change_24h) : "—"}</td>
+            <td>
+              <button class="btn fav-remove" data-symbol="${c.symbol?.toLowerCase() ?? ""}" style="font-size: 0.8rem; color: var(--red)">
+                ✕ Quitar
+              </button>
+            </td>
+          </tr>`;
+          }
+        )
+        .join("");
+
+      container.innerHTML = `
+        <div class="card" style="overflow-x: auto">
+          <table>
+            <thead><tr>
+              <th>Moneda</th><th>Precio</th><th>24h</th><th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+
+      // Bind remove buttons
+      document.querySelectorAll(".fav-remove").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const symbol = btn.dataset.symbol;
+          if (!symbol) return;
+          const updated = getFavorites().filter((f) => f !== symbol);
+          saveFavorites(updated);
+          loadFavorites();
+        });
+      });
+    } catch {
+      container.innerHTML = `<p class="text-muted">Error al cargar favoritos.</p>`;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", loadFavorites);
+</script>

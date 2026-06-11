@@ -1,0 +1,92 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Buscar Criptomonedas — Crypto Tracker" description="Buscá criptomonedas por nombre o símbolo">
+  <div class="container" style="padding-top: 2rem">
+    <h1 style="font-size: 1.8rem; font-weight: 700">🔎 Buscar</h1>
+    <p class="text-secondary" style="margin-top: 0.3rem">
+      Encontrá criptomonedas por nombre o símbolo
+    </p>
+
+    <!-- Search input -->
+    <div style="margin: 1rem 0; max-width: 400px">
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Ej: bitcoin, sol, cardano..."
+        autocomplete="off"
+      />
+    </div>
+
+    <!-- Results -->
+    <div id="search-results"></div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { searchCoins } from "../lib/api";
+  const BASE = "/crypto-tracker";
+
+  let debounceTimer;
+
+  async function doSearch(query) {
+    const container = document.getElementById("search-results");
+    if (!container) return;
+    if (!query || query.length < 1) {
+      container.innerHTML = `<p class="text-muted">Ingresá al menos 2 caracteres para buscar.</p>`;
+      return;
+    }
+    container.innerHTML = `<div class="spinner"></div>`;
+    try {
+      const coins = await searchCoins(query);
+      if (!coins.length) {
+        container.innerHTML = `<p class="text-muted">No se encontraron resultados para "${query}".</p>`;
+        return;
+      }
+      const rows = coins
+        .map(
+          (c) => `
+        <tr>
+          <td>
+            <a href="${BASE}/price/${c.symbol}" style="color: inherit; font-weight: 500">${c.name}</a>
+            <span class="text-muted" style="margin-left: 0.3rem; font-size: 0.8rem">${c.symbol?.toUpperCase() ?? ""}</span>
+          </td>
+          <td class="text-muted" style="font-size: 0.85rem">${c.id}</td>
+          <td>${c.rank > 0 ? `#${c.rank}` : "—"}</td>
+        </tr>`
+        )
+        .join("");
+      container.innerHTML = `
+        <p class="text-secondary" style="margin-bottom: 0.75rem; font-size: 0.85rem">
+          ${coins.length} resultado(s)
+        </p>
+        <div class="card" style="overflow-x: auto">
+          <table>
+            <thead><tr><th>Nombre</th><th>ID</th><th>Rank</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch {
+      container.innerHTML = `<p class="text-muted">Error al buscar.</p>`;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("search-input");
+    if (!input) return;
+    input.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const q = input.value.trim();
+      if (q.length < 2) {
+        document.getElementById("search-results").innerHTML =
+          `<p class="text-muted">Ingresá al menos 2 caracteres para buscar.</p>`;
+        return;
+      }
+      debounceTimer = setTimeout(() => doSearch(q), 400);
+    });
+    // Initial state
+    document.getElementById("search-results").innerHTML =
+      `<p class="text-muted">Ingresá al menos 2 caracteres para buscar.</p>`;
+  });
+</script>
