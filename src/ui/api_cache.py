@@ -14,13 +14,13 @@ from typing import Any
 
 import streamlit as st
 
+# Import the API client
+from src.api import client as api_client
+
 # Cache TTL constants
 CACHE_TTL_SHORT = 120  # 2 minutes - for price data
 CACHE_TTL_MEDIUM = 300  # 5 minutes - for historical data
 CACHE_TTL_LONG = 600  # 10 minutes - for search results
-
-# Import the API client
-from src.api import client as api_client
 
 
 # =============================================================================

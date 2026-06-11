@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.theme import detect_theme, set_theme, get_theme_vars
+from src.ui.theme import detect_theme, set_theme
 
 # Page options for navigation
 PAGE_OPTIONS = [
