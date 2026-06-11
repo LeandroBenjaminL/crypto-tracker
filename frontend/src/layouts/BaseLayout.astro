@@ -52,6 +52,9 @@ function isActive(path: string): boolean {
   <body>
     <!-- Nav -->
     <nav
+      data-site-header
+      data-scroll-state="top"
+      class="site-header"
       style="
         background: var(--bg-nav);
         border-bottom: 1px solid var(--border);
@@ -60,7 +63,7 @@ function isActive(path: string): boolean {
         top: 0;
         z-index: 100;
         backdrop-filter: blur(8px);
-        transition: background 0.3s ease, border-color 0.3s ease;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.15);
       "
     >
       <div
@@ -113,6 +116,28 @@ function isActive(path: string): boolean {
     <main>
       <slot />
     </main>
+
+    <script is:inline>
+      (() => {
+        const header = document.querySelector('[data-site-header]');
+        if (!header) return;
+        let lastY = window.scrollY;
+        let ticking = false;
+        window.addEventListener('scroll', () => {
+          if (!ticking) {
+            window.requestAnimationFrame(() => {
+              const y = window.scrollY;
+              if (y <= 16) header.setAttribute('data-scroll-state', 'top');
+              else if (y > lastY) header.setAttribute('data-scroll-state', 'hidden');
+              else header.setAttribute('data-scroll-state', 'visible');
+              lastY = y;
+              ticking = false;
+            });
+            ticking = true;
+          }
+        }, { passive: true });
+      })();
+    </script>
 
     <!-- Footer -->
     <footer
