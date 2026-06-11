@@ -390,7 +390,7 @@ def remove(alert_id: int) -> None:
         if alert is None:
             click.echo(click.style(f"[X] Alerta #{alert_id} no encontrada", fg="red"))
             return
-        alert.is_active = 0
+        alert.is_active = False
         session.commit()
 
     click.echo(click.style(f"✅ Alerta #{alert_id} cancelada", fg="green"))
@@ -427,7 +427,7 @@ def triggered() -> None:
         dir_str = "📈 superó" if r.condition == "above" else "📉 bajó de"
         click.echo(
             f"  #{r.id}  {r.coin_id:<12} {dir_str} ${r.target_price:>10,.2f}  "
-            f"(el {r.triggered_at.strftime('%d/%m %H:%M')})"
+            f"(el {r.triggered_at.strftime('%d/%m %H:%M') if r.triggered_at else '?'})"
         )
 
 

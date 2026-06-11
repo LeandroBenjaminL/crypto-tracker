@@ -250,7 +250,7 @@ def check_alerts(engine: Any) -> list[dict[str, Any]]:
                 if should_trigger:
                     from datetime import datetime, timezone
 
-                    alert.is_active = 0
+                    alert.is_active = False
                     alert.triggered_at = datetime.now(timezone.utc)
                     triggered.append({
                         "id": alert.id,
