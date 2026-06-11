@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "astro": "^6.4.6",
