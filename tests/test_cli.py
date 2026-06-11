@@ -106,7 +106,7 @@ class TestCliVersion:
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
         assert "crypto-tracker" in result.output
-        assert "0.1.0" in result.output
+        assert "0.3.0" in result.output
 
     def test_cli_help(self, runner: CliRunner):
         """The help text should mention available commands."""
