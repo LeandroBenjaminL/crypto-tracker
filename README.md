@@ -3,25 +3,29 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-256%20cases-green.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-312%20cases-green.svg)](./tests)
 [![CI](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/test.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
 [![Deploy](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/pipeline.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
+[![Frontend](https://github.com/LeandroBenjaminL/crypto-tracker/actions/workflows/frontend.yml/badge.svg)](https://github.com/LeandroBenjaminL/crypto-tracker/actions)
+[![Pages](https://img.shields.io/badge/frontend-github.io-blueviolet.svg)](https://leandrobenjaminl.github.io/crypto-tracker/)
 
-Trackea precios de criptomonedas desde la terminal, un dashboard web o una API REST. Con pipeline ETL que cachea datos en PostgreSQL para respuestas en milisegundos.
+Trackea precios de criptomonedas desde la terminal, Telegram, un dashboard web o una API REST. Con pipeline ETL que cachea datos en PostgreSQL para respuestas en milisegundos.
 
-**Live demo:** [crypto-tracker-api-trwx.onrender.com/docs](https://crypto-tracker-api-trwx.onrender.com/docs)
+**Live demo (API):** [crypto-tracker-api-trwx.onrender.com/docs](https://crypto-tracker-api-trwx.onrender.com/docs)
+**Frontend (Astro):** [leandrobenjaminl.github.io/crypto-tracker](https://leandrobenjaminl.github.io/crypto-tracker/)
 
 ---
 
 ## 📖 Sobre el proyecto
 
-Proyecto de aprendizaje con **arquitectura limpia**, **pipeline de datos** y **deploy en producción**. Trenzas tres interfaces (CLI, Streamlit, API REST) con la misma lógica de negocio.
+Proyecto de aprendizaje con **arquitectura limpia**, **pipeline de datos**, **frontend Astro** y **deploy en producción**. Trenzas múltiples interfaces (CLI, Telegram, API REST, frontend web, Streamlit) con la misma lógica de negocio.
 
 ### Lo que hace
 
-```
+```bash
 crypto-tracker price btc          → $64,321 ▲ +2.34%
 crypto-tracker pipeline           → 100 snapshots, 20 históricos actualizados
+/price btc en Telegram            → 🤖 Bitcoin (BTC): $64,321 ▲ +2.34%
 http://localhost:8000/api/health   → {"status": "ok", "price_source": "db"}
 ```
 
@@ -31,14 +35,17 @@ http://localhost:8000/api/health   → {"status": "ok", "price_source": "db"}
 
 | Capa | Features |
 |------|----------|
-| **💻 CLI** | Precio de monedas, top por market cap, búsqueda, pipeline ETL |
-| **📊 Dashboard** | Streamlit con gráficos interactivos, favoritos, CSV export |
+| **💻 CLI** | Precio de monedas, top por market cap, búsqueda, pipeline ETL, Telegram bot |
+| **🤖 Telegram** | Bot con `/price`, `/top`, `/alert`, `/help` — autorización por lista blanca |
+| **📊 Dashboard (Streamlit)** | Streamlit con gráficos interactivos, favoritos, CSV export, portfolio |
+| **🌐 Frontend (Astro)** | SPA estática con GitHub Pages — precios, top, búsqueda, favoritos, 404 |
 | **🌐 API REST** | FastAPI con Swagger docs, health check, cache en PostgreSQL |
-| **🗄️ Pipeline ETL** | Cada 30min extrae top 100 de CoinGecko y carga en DB |
+| **🗄️ Pipeline ETL** | Cada 30min extrae top 100 de CoinGecko, alertas de precio, histórico |
+| **💼 Portfolio** | Tracking de holdings con P&L, cost basis, valor actual |
 | **⚡ Cache inteligente** | API lee de PostgreSQL (10ms), fallback a CoinGecko si no hay datos |
-| **🐳 Docker** | Una imagen, tres entrypoints: api, streamlit, pipeline |
-| **🗃️ PostgreSQL** | Favoritos + snapshots de precios + histórico con migraciones Alembic |
-| **🔁 CI/CD** | Ruff + mypy + pytest en GitHub Actions, deploy automático a Render |
+| **🐳 Docker** | Una imagen, cuatro entrypoints: api, streamlit, pipeline, telegram |
+| **🗃️ PostgreSQL** | Favoritos + snapshots + histórico + pipeline runs + alertas + portfolio |
+| **🔁 CI/CD** | Ruff + mypy + pytest + Astro build en GitHub Actions, deploy a Render y Pages |
 
 ---
 
@@ -73,6 +80,9 @@ docker run -p 8000:8000 crypto-tracker
 
 # El pipeline (ETL una vez)
 docker run -e DATABASE_URL=... crypto-tracker pipeline
+
+# Telegram bot
+docker run -e TELEGRAM_BOT_TOKEN=... crypto-tracker telegram
 ```
 
 ### Con PostgreSQL (recomendado)
@@ -90,34 +100,37 @@ crypto-tracker pipeline   # <- corre migrations + ETL
 ## 🏗️ Arquitectura
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         CLIENTES                                 │
-│  ┌────────┐  ┌──────────────┐  ┌──────────┐                      │
-│  │  CLI   │  │  Streamlit   │  │  API     │  ← también es server │
-│  └────┬───┘  └──────┬───────┘  └─────┬────┘                      │
-│       │             │               │                            │
-├───────┴─────────────┴───────────────┴────────────────────────────┤
-│                      ┌──────────────┐                            │
-│                      │  CORE        │  ← lógica de negocio pura  │
-│                      │  price_      │    sin imports externos     │
-│                      │  service.py  │                            │
-│                      └──────┬───────┘                            │
-│                             │                                     │
-│               ┌─────────────┼─────────────┐                       │
-│               ▼             ▼             ▼                       │
-│  ┌──────────────────┐ ┌──────────┐ ┌──────────┐                  │
-│  │  CoinGeckoClient │ │PostgreSQL│ │ Favorites│                  │
-│  │  (adapters)      │ │(adapters)│ │ (json)   │                  │
-│  └──────────────────┘ └──────────┘ └──────────┘                  │
-├──────────────────────────────────────────────────────────────────┤
-│                      PIPELINE ETL (cada 30min)                    │
-│                                                                  │
-│  CoinGecko ──Extrae──▶ Transforma ──Carga──▶ PostgreSQL          │
-│     │                                       │                    │
-│     └── Histórico (7d, 30d, 90d) cada 6h ───┘                    │
-│                                                                  │
-│  La API lee de PostgreSQL. CoinGecko es SOLO el fallback.        │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           CLIENTES                                      │
+│  ┌────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
+│  │  CLI   │  │  Telegram    │  │  API     │  │ Streamlit│  │  Astro  │ │
+│  │ Click  │  │  Bot         │  │  REST    │  │ Dashboard│  │ Frontend│ │
+│  └────┬───┘  └──────┬───────┘  └────┬─────┘  └────┬─────┘  └────┬────┘ │
+│       │             │               │              │              │      │
+├───────┴─────────────┴───────────────┴──────────────┴──────────────┴──────┤
+│                                ┌──────────────┐                         │
+│                                │   CORE       │ ← lógica de negocio     │
+│                                │  price_      │   pura, sin imports     │
+│                                │  service.py  │   externos              │
+│                                │  pipeline.py │                         │
+│                                └──────┬───────┘                         │
+│                                       │                                  │
+│                         ┌─────────────┼─────────────┐                    │
+│                         ▼             ▼             ▼                    │
+│  ┌──────────────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐          │
+│  │  CoinGeckoClient │ │PostgreSQL│ │ Favorites│ │ Telegram  │          │
+│  │  (adapters)      │ │(adapters)│ │ (json)   │ │ Bot (own) │          │
+│  └──────────────────┘ └──────────┘ └──────────┘ └───────────┘          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                      PIPELINE ETL (cada 30min)                          │
+│                                                                         │
+│  CoinGecko ──Extrae──▶ Transforma ──Carga──▶ PostgreSQL                │
+│     │                                       │                           │
+│     └── Histórico (7d, 30d, 90d) cada 6h ───┘                           │
+│     └── Alertas de precio ──▶ check_alerts() ──▶ triggered              │
+│                                                                         │
+│  La API lee de PostgreSQL. CoinGecko es SOLO el fallback.               │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Flujo de datos
@@ -147,6 +160,11 @@ La API corre en **Render** y en local con Docker:
 | `POST /api/favorites/{symbol}` | Agregar favorito | DB |
 | `GET /api/favorites` | Listar favoritos | DB |
 | `DELETE /api/favorites/{symbol}` | Quitar favorito | DB |
+| `GET /api/portfolio` | Listar holdings | DB |
+| `POST /api/portfolio` | Crear holding | DB |
+| `PUT /api/portfolio/{id}` | Actualizar holding | DB |
+| `DELETE /api/portfolio/{id}` | Eliminar holding | DB |
+| `GET /api/portfolio/summary` | Resumen P&L | DB |
 
 **URLs:**
 - Producción: `https://crypto-tracker-api-trwx.onrender.com`
@@ -160,9 +178,10 @@ El pipeline se ejecuta automáticamente:
 
 | Frecuencia | Qué hace | Cómo |
 |------------|----------|------|
-| **Cada 30 min** | Snapshots de precios (top 100) | GitHub Actions |
+| **Cada 30 min** | Snapshots de precios (top 100) | GitHub Actions (manual dispatch) |
 | **Cada 6h** | Histórico (7d, 30d, 90d) para top 20 | Pipeline + CoinGecko |
 | **Al arrancar** | Migraciones Alembic | `run_migrations()` |
+| **Post-pipeline** | Check de alertas de precio | `check_alerts()` |
 
 ```bash
 # Manualmente
@@ -177,20 +196,40 @@ crypto-tracker pipeline --top 100
 # Todos
 pytest
 
+# Solo un archivo
+pytest tests/test_portfolio_repository.py -v
+
+# Tests de error/edge cases
+pytest -v -k "error or edge or not_found or empty or unknown"
+
 # Con coverage
 pytest --cov=src --cov-report=term
 
-# 256 tests, 73% coverage
+# 312 tests — 9 test files
 ```
+
+| Suite | Archivo | Tests | Qué cubre |
+|-------|---------|-------|-----------|
+| Models | `test_models.py` | ~50 | Creación, igualdad, formateo, excepciones |
+| Price Service | `test_price_service.py` | ~30 | Lógica de negocio, resolución de símbolos |
+| CoinGecko Client | `test_api_client.py` | ~18 | HTTP mocks, rate limit, errores, cache |
+| API Server | `test_api_server.py` | ~50 | FastAPI TestClient, endpoints, errores |
+| HTTP Client | `test_api_client_http.py` | ~44 | Cliente HTTP mocks |
+| CLI | `test_cli.py` | ~17 | Click CliRunner, argumentos |
+| Favorites (JSON) | `test_favorites.py` | ~16 | CRUD JSON, persistencia |
+| DB Repository | `test_database.py` | ~14 | SQLAlchemy FavoritesRepository |
+| Portfolio | `test_portfolio_repository.py` | 37 | CRUD + P&L summary |
 
 ### CI/CD
 
 | Check | Qué verifica | Estado |
 |-------|-------------|--------|
 | Ruff | Formato e imports | ✅ |
-| Mypy | Tipado estático | ✅ |
-| Pytest | Tests (3 versiones de Python) | ✅ |
-| Pipeline ETL | Cron cada 30 min | ✅ |
+| Mypy | Tipado estático (25 archivos) | ✅ |
+| Pytest | Tests (3 versiones de Python) | ✅ (312 passed, 1 skipped) |
+| Astro Build | Build del frontend | ✅ |
+| Pipeline ETL | Cron manual | ✅ |
+| GitHub Pages | Deploy automático | ✅ |
 
 ---
 
@@ -205,6 +244,9 @@ docker run -p 8000:8000 crypto-tracker
 
 # Streamlit
 docker run -e ENTRYPOINT=streamlit -p 8501:8501 crypto-tracker
+
+# Telegram
+docker run -e ENTRYPOINT=telegram -e TELEGRAM_BOT_TOKEN=... crypto-tracker
 
 # Pipeline
 docker run -e DATABASE_URL=... crypto-tracker pipeline
@@ -225,17 +267,19 @@ Ver [ROADMAP.md](ROADMAP.md) para el plan completo.
 
 ### Completado ✅
 
-- CLI + Streamlit + API REST
-- Pipeline ETL con PostgreSQL
+- CLI + Telegram + Streamlit + API REST
+- Frontend Astro con GitHub Pages
+- Pipeline ETL con PostgreSQL + alertas de precio
+- Portfolio tracking con P&L
 - Cache inteligente (DB first, CoinGecko fallback)
-- Migraciones automáticas (Alembic)
-- Deploy a Render + GitHub Actions
-- CI verde (ruff, mypy, 256 tests)
+- Migraciones automáticas (Alembic, 5 migrations)
+- Deploy a Render + GitHub Actions + GitHub Pages
+- CI verde (ruff, mypy, 312 tests)
 
 ### Próximo 🔜
 
-- Alertas de precios (notificaciones)
-- Autenticación básica
+- Notificaciones de alertas (email/push)
+- Autenticación básica en API
 - Dashboard de métricas del pipeline
 
 ---
@@ -249,10 +293,14 @@ Ver [ROADMAP.md](ROADMAP.md) para el plan completo.
 | Protocol / Structural Typing | `CoinGeckoClientProtocol` |
 | ETL Pipeline | `src/core/pipeline.py` |
 | API REST | `src/api/server.py` con FastAPI |
-| Migraciones DB | `migrations/` con Alembic |
+| Migraciones DB | `migrations/` con Alembic (5 versiones) |
+| Telegram Bot | `src/telegram/bot.py` con python-telegram-bot |
+| Portfolio & P&L | `src/adapters/database.py` — PortfolioRepository |
+| Price Alerts | `src/core/pipeline.py` — `check_alerts()` |
 | Docker multi-entrypoint | `Dockerfile` con `case` + `$ENTRYPOINT` |
-| CI/CD | `.github/workflows/` |
-| Deploy cloud | Render + GitHub Actions |
+| Frontend SSG | `frontend/` con Astro 6 |
+| CI/CD | `.github/workflows/` (3 workflows) |
+| Deploy cloud | Render + GitHub Pages |
 
 ---
 
@@ -264,6 +312,7 @@ Ver [ROADMAP.md](ROADMAP.md) para el plan completo.
 | [CHANGELOG.md](CHANGELOG.md) | Historial de versiones |
 | [ROADMAP.md](ROADMAP.md) | Plan de desarrollo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Guía para contribuir |
+| [frontend/README.md](frontend/README.md) | Documentación del frontend Astro |
 
 ---
 

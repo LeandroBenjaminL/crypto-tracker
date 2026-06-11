@@ -1,43 +1,83 @@
-# Astro Starter Kit: Minimal
+# Crypto Tracker — Frontend (Astro 6)
 
-```sh
-npm create astro@latest -- --template minimal
+Frontend estático para [Crypto Tracker](https://github.com/LeandroBenjaminL/crypto-tracker). Construido con [Astro 6](https://astro.build/).
+
+**Live:** [leandrobenjaminl.github.io/crypto-tracker](https://leandrobenjaminl.github.io/crypto-tracker/)
+
+---
+
+## ✨ Features
+
+| Página | Ruta | Descripción |
+|--------|------|-------------|
+| **Inicio** | `/` | Market overview con cards de precios |
+| **Precio** | `/price/[slug]` | Precio detalle con tabla |
+| **Top** | `/top` | Top monedas por market cap |
+| **Búsqueda** | `/search` | Buscar monedas por nombre/símbolo |
+| **Favoritos** | `/favorites` | Monedas favoritas |
+| **404** | `/*` | Página no encontrada |
+
+## 🧞 Comandos
+
+```bash
+cd frontend
+
+npm install          # Instalar dependencias
+npm run dev          # Servidor local → localhost:4321
+npm run build        # Build producción → dist/
+npm run preview      # Preview del build local
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## 🏗️ Estructura
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
+```
+frontend/
 ├── src/
-│   └── pages/
-│       └── index.astro
+│   ├── components/
+│   │   ├── CoinsTable.astro     # Tabla de precios reutilizable
+│   │   ├── PriceCard.astro      # Card de precio individual
+│   │   └── ThemeToggle.astro    # Toggle dark/light theme
+│   ├── layouts/
+│   │   └── BaseLayout.astro     # Layout base (header + footer + theme)
+│   ├── lib/
+│   │   ├── api.ts              # Cliente HTTP para la API REST
+│   │   └── render.ts           # Helpers de renderizado compartidos
+│   ├── pages/
+│   │   ├── index.astro         # Home
+│   │   ├── price/[slug].astro  # Precio detalle (SSG dinámico)
+│   │   ├── top.astro           # Top monedas
+│   │   ├── search.astro        # Búsqueda
+│   │   ├── favorites.astro     # Favoritos
+│   │   └── 404.astro           # Página no encontrada
+│   └── styles/
+│       └── global.css          # Estilos globales + temas claro/oscuro
+├── public/                     # Assets estáticos
+├── astro.config.mjs
 └── package.json
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## 🌐 API
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+El frontend consume la API REST del proyecto:
 
-Any static assets, like images, can be placed in the `public/` directory.
+```typescript
+// src/lib/api.ts
+const API_BASE = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
+```
 
-## 🧞 Commands
+En producción apunta a `https://crypto-tracker-api-trwx.onrender.com`. En desarrollo se puede configurar via `PUBLIC_API_URL`.
 
-All commands are run from the root of the project, from a terminal:
+## 🚀 Deploy
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+El deploy es automático via GitHub Actions (`.github/workflows/frontend.yml`):
 
-## 👀 Want to learn more?
+1. Push a `main` con cambios en `frontend/`
+2. GitHub Actions corre `npm ci && npm run build`
+3. Sube `dist/` como Pages artifact
+4. GitHub Pages deploya automáticamente
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+URL: `https://leandrobenjaminl.github.io/crypto-tracker/`
+
+## 🎨 Tema
+
+Soporte dark/light mode via `ThemeToggle` component. Usa CSS custom properties definidas en `global.css`. La preferencia se persiste en `localStorage`.

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crypto-tracker"
-version = "0.3.0"
-description = "CLI tool to track cryptocurrency prices and manage favorites"
+version = "0.4.0"
+description = "Cryptocurrency tracker: CLI, Telegram, API REST, dashboard and frontend with ETL pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

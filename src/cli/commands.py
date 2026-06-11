@@ -155,7 +155,7 @@ def _handle_error(error: CryptoTrackerError) -> None:
 
 
 @click.group()
-@click.version_option(version="0.3.0", prog_name="crypto-tracker")
+@click.version_option(version="0.4.0", prog_name="crypto-tracker")
 def cli() -> None:
     """
     Crypto Tracker — track cryptocurrency prices from your terminal.
