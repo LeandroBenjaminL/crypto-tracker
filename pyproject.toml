@@ -87,27 +87,3 @@ warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true
 
-# SQLAlchemy tiene falsos positivos con mypy en Column assignment
-[[tool.mypy.overrides]]
-module = "src.adapters.database"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "src.core.pipeline"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "src.api.client"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "src.api.server"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "src.telegram.bot"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "src.cli.commands"
-ignore_errors = true

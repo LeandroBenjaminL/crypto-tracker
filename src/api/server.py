@@ -15,6 +15,7 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 from typing import Any
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,7 +54,7 @@ if settings.database_url:
     try:
         from src.adapters.database import FavoritesRepository
 
-        _favorites = FavoritesRepository(settings.database_url)
+        _favorites: FavoritesRepository | FavoritesManager = FavoritesRepository(settings.database_url)
         _favorites_source = "postgresql"
     except Exception as exc:
         _logger.warning("DB no disponible, usando JSON fallback: %s", exc)
@@ -218,7 +219,7 @@ def _precache() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> None:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Corre migraciones y precarga datos en background."""
     # 1. Migraciones de DB (si hay DATABASE_URL)
     from src.adapters.database import run_migrations
@@ -619,7 +620,7 @@ class AlertTriggeredOut(BaseModel):
     symbol: str | None
     target_price: float
     condition: str
-    triggered_at: str
+    triggered_at: str | None = None
 
 
 @app.post(
@@ -741,7 +742,7 @@ def list_triggered_alerts() -> list[AlertTriggeredOut]:
                 symbol=r.symbol,
                 target_price=r.target_price,
                 condition=r.condition,
-                triggered_at=r.triggered_at.isoformat(),
+                triggered_at=r.triggered_at.isoformat() if r.triggered_at else None,
             )
             for r in rows
         ]

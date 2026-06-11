@@ -17,7 +17,7 @@ from typing import Any
 
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from src.core.exceptions import CryptoTrackerError
 from src.core.models import FavoriteCoin, PortfolioHolding
@@ -38,8 +38,8 @@ class FavoriteRow(Base):
 
     __tablename__ = "favorites"
 
-    symbol: str = Column(String(50), primary_key=True)
-    added_at: datetime = Column(
+    symbol: Mapped[str] = mapped_column(String(50), primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -56,16 +56,16 @@ class PriceSnapshotRow(Base):
 
     __tablename__ = "price_snapshots"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    coin_id: str = Column(String(100), nullable=False, index=True)
-    symbol: str = Column(String(20), nullable=False)
-    name: str = Column(String(100), nullable=False)
-    price: float = Column(Float, nullable=False)
-    change_24h: float = Column(Float, nullable=True)
-    volume_24h: float = Column(Float, nullable=True)
-    market_cap: float = Column(Float, nullable=True)
-    rank: int = Column(Integer, nullable=True)
-    snapshot_at: datetime = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    coin_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    change_24h: Mapped[float] = mapped_column(Float, nullable=True)
+    volume_24h: Mapped[float] = mapped_column(Float, nullable=True)
+    market_cap: Mapped[float] = mapped_column(Float, nullable=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=True)
+    snapshot_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -83,10 +83,10 @@ class PriceHistoryRow(Base):
 
     __tablename__ = "price_history"
 
-    coin_id: str = Column(String(100), primary_key=True)
-    days: int = Column(Integer, primary_key=True)  # 7, 30, 90, 365
-    data: str = Column(Text, nullable=False)  # JSON: [{"timestamp": ..., "price": ...}]
-    updated_at: datetime = Column(
+    coin_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    days: Mapped[int] = mapped_column(Integer, primary_key=True)  # 7, 30, 90, 365
+    data: Mapped[str] = mapped_column(Text, nullable=False)  # JSON: [{"timestamp": ..., "price": ...}]
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -104,20 +104,20 @@ class PipelineRunRow(Base):
 
     __tablename__ = "pipeline_runs"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    started_at: datetime = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
-    finished_at: datetime = Column(
+    finished_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    status: str = Column(String(20), nullable=False, default="running")  # running | success | error
-    snapshots_inserted: int = Column(Integer, default=0)
-    history_updated: int = Column(Integer, default=0)
-    error_message: str = Column(Text, nullable=True)
-    trigger: str = Column(String(50), nullable=False, default="manual")  # manual | schedule
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")  # running | success | error
+    snapshots_inserted: Mapped[int] = mapped_column(Integer, default=0)
+    history_updated: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str] = mapped_column(Text, nullable=True)
+    trigger: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")  # manual | schedule
 
 
 class PriceAlertRow(Base):
@@ -131,14 +131,14 @@ class PriceAlertRow(Base):
 
     __tablename__ = "price_alerts"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    coin_id: str = Column(String(100), nullable=False, index=True)
-    target_price: float = Column(Float, nullable=False)
-    condition: str = Column(String(10), nullable=False)  # above | below
-    symbol: str = Column(String(20), nullable=True)
-    is_active: bool = Column(Integer, default=True)  # SQLAlchemy: Integer como bool
-    triggered_at: datetime = Column(DateTime(timezone=True), nullable=True)
-    created_at: datetime = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    coin_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_price: Mapped[float] = mapped_column(Float, nullable=False)
+    condition: Mapped[str] = mapped_column(String(10), nullable=False)  # above | below
+    symbol: Mapped[str] = mapped_column(String(20), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Integer, default=True)  # SQLAlchemy: Integer como bool
+    triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -155,17 +155,20 @@ class PortfolioHoldingRow(Base):
 
     __tablename__ = "portfolio_holdings"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    coin_id: str = Column(String(100), nullable=False, index=True)
-    symbol: str = Column(String(20), nullable=False)
-    quantity: float = Column(Float, nullable=False)
-    purchase_price: float = Column(Float, nullable=False)
-    created_at: datetime = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    coin_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    purchase_price: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    updated_at: datetime = Column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
 
 
 # ---------------------------------------------------------------------------

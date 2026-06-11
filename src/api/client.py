@@ -63,8 +63,6 @@ def get_price(query: str, currency: str = "usd") -> dict[str, Any]:
         resp = requests.get(f"{_API_BASE}/api/price/{query}", params={"currency": currency})
     except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
-    except requests.Timeout:
-        raise NetworkError()
     return _handle_response(resp)
 
 
@@ -75,15 +73,14 @@ def get_prices(queries: list[str], currency: str = "usd") -> list[dict[str, Any]
         resp = requests.get(f"{_API_BASE}/api/prices", params={"q": q, "currency": currency})
     except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
-    except requests.Timeout:
-        raise NetworkError()
     return _handle_response(resp)
 
 
 def get_top(limit: int = 10, currency: str = "usd") -> list[dict[str, Any]]:
     """Top N monedas por market cap."""
     try:
-        resp = requests.get(f"{_API_BASE}/api/top", params={"limit": limit, "currency": currency})
+        params: dict[str, str | int] = {"limit": limit, "currency": currency}
+        resp = requests.get(f"{_API_BASE}/api/top", params=params)
     except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()
     return _handle_response(resp)
@@ -92,9 +89,10 @@ def get_top(limit: int = 10, currency: str = "usd") -> list[dict[str, Any]]:
 def get_history(query: str, days: int = 7, currency: str = "usd") -> list[dict[str, float]]:
     """Precio histórico."""
     try:
+        params: dict[str, str | int] = {"days": days, "currency": currency}
         resp = requests.get(
             f"{_API_BASE}/api/history/{query}",
-            params={"days": days, "currency": currency},
+            params=params,
         )
     except (requests.ConnectionError, requests.Timeout):
         raise NetworkError()

@@ -48,6 +48,8 @@ def _is_allowed(user_id: int) -> bool:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Bienvenida."""
+    if update.effective_user is None or update.message is None:
+        return
     if not _is_allowed(update.effective_user.id):
         await update.message.reply_text("⛔ No autorizado")
         return
@@ -64,6 +66,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra el precio de una moneda. Uso: /price btc"""
+    if update.effective_user is None or update.message is None:
+        return
     if not _is_allowed(update.effective_user.id):
         return
 
@@ -99,6 +103,8 @@ async def cmd_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra las top monedas. Uso: /top 10"""
+    if update.effective_user is None or update.message is None:
+        return
     if not _is_allowed(update.effective_user.id):
         return
 
@@ -137,10 +143,12 @@ async def cmd_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Crea una alerta de precio. Uso: /alert btc above 100000"""
+    if update.effective_user is None or update.message is None:
+        return
     if not _is_allowed(update.effective_user.id):
         return
 
-    if len(context.args) < 3:
+    if context.args is None or len(context.args) < 3:
         await update.message.reply_text(
             "Usá: /alert <moneda> <above|below> <precio>\n"
             "Ej: /alert btc above 100000"
