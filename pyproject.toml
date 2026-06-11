@@ -44,6 +44,7 @@ dev = [
   "pytest>=7.4.0",
   "pytest-cov>=4.1.0",
   "pytest-mock>=3.12.0",
+  "pytest-asyncio>=1.4.0",
   "httpx>=0.25.0",          # Para tests de cliente HTTP
   "ruff>=0.1.0",            # Linter rápido
   "mypy>=1.7.0",            # Tipado estático
@@ -64,6 +65,7 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 120
