@@ -691,8 +691,8 @@ def list_alerts() -> list[AlertOut]:
     with Session(engine) as session:
         rows = (
             session.query(PriceAlertRow)
-            .filter(PriceAlertRow.is_active == 1)
-            .order_by(PriceAlertRow.created_at.desc())
+            .filter(PriceAlertRow.is_active == 1)  # type: ignore[arg-type]
+            .order_by(PriceAlertRow.created_at.desc())  # type: ignore[attr-defined]
             .all()
         )
         return [
@@ -730,8 +730,8 @@ def list_triggered_alerts() -> list[AlertTriggeredOut]:
     with Session(engine) as session:
         rows = (
             session.query(PriceAlertRow)
-            .filter(PriceAlertRow.is_active == 0)
-            .order_by(PriceAlertRow.triggered_at.desc())
+            .filter(PriceAlertRow.is_active == 0)  # type: ignore[arg-type]
+            .order_by(PriceAlertRow.triggered_at.desc())  # type: ignore[attr-defined]
             .all()
         )
         return [
@@ -764,10 +764,10 @@ def delete_alert(alert_id: int) -> None:
 
     engine = create_engine(settings.database_url)
     with Session(engine) as session:
-        alert = session.query(PriceAlertRow).filter(PriceAlertRow.id == alert_id).first()
+        alert = session.query(PriceAlertRow).filter(PriceAlertRow.id == alert_id).first()  # type: ignore[arg-type]
         if alert is None:
             raise HTTPException(404, "Alerta no encontrada")
-        alert.is_active = 0
+        alert.is_active = False  # type: ignore[assignment]
         session.commit()
 
 
