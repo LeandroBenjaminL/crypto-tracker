@@ -1,0 +1,33 @@
+# EditorConfig — https://editorconfig.org
+# Mantiene consistencia de formato entre editores (VS Code, PyCharm, Vim, etc.)
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,pyi}]
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.{json,jsonc}]
+indent_size = 2
+
+[*.{md,rst}]
+indent_size = 4
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+[Dockerfile]
+indent_size = 4
+
+[*.{sh,bash}]
+indent_size = 2
