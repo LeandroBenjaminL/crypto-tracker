@@ -123,24 +123,25 @@ function _resolveId(query: string): string {
 async function _cgPrice(symbol: string): Promise<CoinResult | null> {
 	const id = _resolveId(symbol);
 	try {
-		const data = await _fetch<
-			Record<string, { usd: number; usd_24h_change?: number }>
-		>(
-			`${CG_BASE}/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`,
-			5000,
+		const data = await _fetch<any>(
+			`${CG_BASE}/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`,
+			6000,
 		);
-		const coin = data[id];
-		if (!coin) return null;
+		if (!data || !data.market_data) return null;
+		const md = data.market_data;
 		return {
 			id,
 			symbol,
-			name: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-			rank: 0,
-			price: coin.usd,
-			change_24h: coin.usd_24h_change ?? null,
-			volume_24h: null,
-			market_cap: null,
-			price_formatted: fmtPrice(coin.usd),
+			name: data.name || id.replace(/-/g, " ").replace(/\b\w/g, (c) =>
+				c.toUpperCase(),
+			),
+			rank: data.market_cap_rank ?? 0,
+			price: md.current_price?.usd ?? null,
+			change_24h: md.price_change_percentage_24h ?? null,
+			volume_24h: md.total_volume?.usd ?? null,
+			market_cap: md.market_cap?.usd ?? null,
+			price_formatted:
+				md.current_price?.usd != null ? fmtPrice(md.current_price.usd) : null,
 		};
 	} catch {
 		return null;
