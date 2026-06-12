@@ -450,6 +450,7 @@ def pipeline(ctx: click.Context) -> None:
         _run_pipeline()
 
 
+@pipeline.command()
 @click.option(
     "--top",
     "-n",
@@ -457,7 +458,6 @@ def pipeline(ctx: click.Context) -> None:
     show_default=True,
     help="Cuantas monedas traer (max 250)",
 )
-@pipeline.command()
 def run(top: int) -> None:
     """Ejecuta el pipeline ETL."""
     _run_pipeline(top_n=top)

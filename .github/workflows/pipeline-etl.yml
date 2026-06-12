@@ -27,7 +27,7 @@ jobs:
           PIP_EXTRA_INDEX_URL: ${{ secrets.PIP_EXTRA_INDEX_URL }}
 
       - name: Run pipeline
-        run: crypto-tracker pipeline --top 100
+        run: crypto-tracker pipeline run --top 100
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
